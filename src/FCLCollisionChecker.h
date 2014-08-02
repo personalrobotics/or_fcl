@@ -66,7 +66,7 @@ public:
     virtual bool CheckCollision(
         LinkConstPtr plink1, LinkConstPtr plink2,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         LinkConstPtr plink, KinBodyConstPtr pbody,
         CollisionReportPtr report = CollisionReportPtr()

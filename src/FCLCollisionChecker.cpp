@@ -90,7 +90,7 @@ void FCLCollisionChecker::DestroyEnvironment()
 }
 
 bool FCLCollisionChecker::CheckCollision(
-    KinBodyConstPtr body1, CollisionReportPtr report)
+        KinBodyConstPtr body1, CollisionReportPtr report)
 {
     CollisionGroup group1, group2;
 
@@ -119,6 +119,26 @@ bool FCLCollisionChecker::CheckCollision(
 
     return RunCheck(report);
 } 
+
+bool FCLCollisionChecker::CheckCollision(
+        LinkConstPtr link1, LinkConstPtr link2, CollisionReportPtr report)
+{
+    CollisionGroup group1, group2;
+
+    // Group 1: link1.
+    manager1_->clear();
+    Synchronize(link1, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: link2.
+    manager2_->clear();
+    Synchronize(link2, &group2);
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
 {
