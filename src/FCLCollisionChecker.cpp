@@ -167,40 +167,6 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
     
 }
 
-void FCLCollisionChecker::Synchronize(CollisionGroup *group)
-{
-#if 0
-    // TODO: It might be possible to speed this up by intelligently re-using
-    // parts of the broad-phase checker between queries. See the update
-    // functions.
-    broad_phase_->clear();
-
-    std::vector<KinBodyPtr> bodies;
-    GetEnv()->GetBodies(bodies);
-    for (KinBodyPtr const &body : bodies) {
-        // Skip objects that are disabled.
-        if (!body->IsEnabled()) {
-            continue;
-        }
-
-        // Synchronize this object with the FCL environment.
-        FCLUserDataPtr const collision_data = GetCollisionData(body);
-        Synchronize(collision_data, body);
-
-        // Register the object's geometry with the broad-phase checker.
-        for (auto const &it : collision_data->geometries) {
-            Geometry const *const geometry = it.first;
-            CollisionObjectPtr const &collision_object = it.second;
-            if (collision_object) {
-                broad_phase_->registerObject(collision_object.get());
-            }
-        }
-    }
-
-    broad_phase_->setup();
-#endif
-}
-
 void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
                                       CollisionGroup *group)
 {
@@ -258,6 +224,8 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             OpenRAVE::Transform const &pose = link_pose * geom->GetTransform();
             fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
             fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
+
+            RAVELOG_INFO("Created FCL object\n");
 
             if (group) {
                 group->push_back(fcl_object.get());

@@ -120,7 +120,6 @@ private:
 
     bool RunCheck(CollisionReportPtr report);
 
-    void Synchronize(CollisionGroup *group = NULL);
     void Synchronize(KinBodyConstPtr const &body,
                      CollisionGroup *group = NULL);
     void Synchronize(FCLUserDataPtr const &user_data, KinBodyConstPtr const &body,
