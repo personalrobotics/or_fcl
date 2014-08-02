@@ -14,12 +14,16 @@ namespace or_fcl {
  * FCLUserData
  */
 struct FCLUserData : public OpenRAVE::UserData {
+    // TODO: Switch to a real weak_ptr. This requires defining a hash function
+    // for boost::weak_ptr<T>.
+    //typedef boost::weak_ptr<OpenRAVE::KinBody::Link::Geometry const>
+    //            GeometryConstWeakPtr;
+    typedef OpenRAVE::KinBody::Link::Geometry const *GeometryConstWeakPtr;
+    typedef boost::shared_ptr<fcl::CollisionObject> CollisionObjectPtr;
+
     virtual ~FCLUserData();
 
-    boost::unordered_map<
-            OpenRAVE::KinBody::Link::Geometry const *,
-            boost::shared_ptr<fcl::CollisionObject>
-        > geometries;
+    boost::unordered_map<GeometryConstWeakPtr, CollisionObjectPtr> geometries;
 };
 
 typedef boost::shared_ptr<FCLUserData> FCLUserDataPtr;
