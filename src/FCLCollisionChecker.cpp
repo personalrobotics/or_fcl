@@ -67,6 +67,12 @@ FCLCollisionChecker::~FCLCollisionChecker()
 
 bool FCLCollisionChecker::InitEnvironment()
 {
+    std::vector<KinBodyPtr> bodies;
+    GetEnv()->GetBodies(bodies);
+
+    for (KinBodyPtr const &body : bodies) {
+        InitKinBody(body);
+    }
     return true;
 }
 
@@ -74,6 +80,13 @@ void FCLCollisionChecker::DestroyEnvironment()
 {
     manager1_->clear();
     manager2_->clear();
+
+    std::vector<KinBodyPtr> bodies;
+    GetEnv()->GetBodies(bodies);
+
+    for (KinBodyPtr const &body : bodies) {
+        RemoveKinBody(body);
+    }
 }
 
 bool FCLCollisionChecker::CheckCollision(
@@ -131,6 +144,7 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
         RAVELOG_WARN("or_fcl does not currently populate CollisionReport.\n");
     }
 
+#if 0
     if (options_ | OpenRAVE::CO_Distance) {
         throw OpenRAVE::openrave_exception(
             "or_fcl does not currently support CO_Distance.",
@@ -143,6 +157,7 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
             OpenRAVE::ORE_NotImplemented
         );
     }
+#endif
 
     CollisionQuery query;
     manager1_->collide(manager2_.get(), &query,
@@ -257,9 +272,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
     BOOST_ASSERT(num_fcl_geometries >= num_or_geometries);
 
     if (num_fcl_geometries > num_or_geometries) {
-        RAVELOG_WARN("Removing geometries from the environment may leak"
-                     " memory inside the FCL environment. Garbage"
-                     " collection is not currently implemented.");
+        // TODO: Cleanup geometries.
     }
 }
 
