@@ -91,10 +91,12 @@ void FCLCollisionChecker::Synchronize()
         FCLUserDataPtr const collision_data = Synchronize(body);
 
         // Register the object's geometry with the broad-phase checker.
-        for (CollisionObjectPtr const &collision_object
-                : collision_data->geometries | map_values) {
-            // TODO: Check if this geometry is enabled.
-            broad_phase_->registerObject(collision_object.get());
+        for (auto const &it : collision_data->geometries) {
+            Geometry const *const geometry = it.first;
+            CollisionObjectPtr const &collision_object = it.second;
+            if (collision_object) {
+                broad_phase_->registerObject(collision_object.get());
+            }
         }
     }
 
@@ -108,6 +110,10 @@ FCLUserDataPtr FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
     BOOST_ASSERT(collision_data);
 
     for (LinkPtr const &link : body->GetLinks()) {
+        if (!link->IsEnabled()) {
+            continue;
+        }
+
         OpenRAVE::Transform const link_pose = link->GetTransform();
 
         for (GeometryPtr const &geom : link->GetGeometries()) {
@@ -116,7 +122,7 @@ FCLUserDataPtr FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
             );
             CollisionObjectPtr &fcl_object = result.first->second;
 
-            // TODO: Check if the geometry is enabled.
+            // TODO: Don't bother syncing geometry that is not enabled.
 
             // Convert the OpenRAVE geometry into FCL geometry. This is
             // necessary if: (1) there is no existing FCL geometry for this
@@ -150,8 +156,8 @@ FCLUserDataPtr FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
 
         if (num_fcl_geometries > num_or_geometries) {
             RAVELOG_WARN("Removing geometries from the environment may leak"
-                          " memory inside the FCL environment. Garbage"
-                          " collection is not currently implemented.");
+                         " memory inside the FCL environment. Garbage"
+                         " collection is not currently implemented.");
         }
     }
     return collision_data;
