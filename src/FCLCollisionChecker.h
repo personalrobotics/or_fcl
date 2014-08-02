@@ -114,8 +114,12 @@ private:
     std::string user_data_;
     BroadPhaseCollisionManagerPtr broad_phase_;
 
+    FCLUserDataPtr GetCollisionData(KinBodyConstPtr const &body) const;
+
     void Synchronize();
-    FCLUserDataPtr Synchronize(KinBodyConstPtr const &body);
+    void Synchronize(KinBodyConstPtr const &body);
+    void Synchronize(FCLUserDataPtr const &user_data, KinBodyConstPtr const &body);
+    void Synchronize(LinkConstPtr const &body);
     void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body);
 
     static bool NarrowPhaseCheckCollision(

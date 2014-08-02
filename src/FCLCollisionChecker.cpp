@@ -94,6 +94,13 @@ void FCLCollisionChecker::RemoveKinBody(KinBodyPtr body)
     body->RemoveUserData(user_data_);
 }
 
+FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
+        KinBodyConstPtr const &body) const
+{
+    UserDataPtr const user_data = body->GetUserData(user_data_);
+    return dynamic_pointer_cast<FCLUserData>(user_data);
+}
+
 void FCLCollisionChecker::Synchronize()
 {
     // TODO: It might be possible to speed this up by intelligently re-using
@@ -110,7 +117,8 @@ void FCLCollisionChecker::Synchronize()
         }
 
         // Synchronize this object with the FCL environment.
-        FCLUserDataPtr const collision_data = Synchronize(body);
+        FCLUserDataPtr const collision_data = GetCollisionData(body);
+        Synchronize(collision_data, body);
 
         // Register the object's geometry with the broad-phase checker.
         for (auto const &it : collision_data->geometries) {
@@ -125,19 +133,26 @@ void FCLCollisionChecker::Synchronize()
     broad_phase_->setup();
 }
 
-FCLUserDataPtr FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
+void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
 {
-    UserDataPtr const user_data = body->GetUserData(user_data_);
-    auto const collision_data = dynamic_pointer_cast<FCLUserData>(user_data);
-    BOOST_ASSERT(collision_data);
+    return Synchronize(GetCollisionData(body), body);
+}
 
+void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
+                                      KinBodyConstPtr const &body)
+{
     for (LinkPtr const &link : body->GetLinks()) {
         if (!link->IsEnabled()) {
             continue;
         }
 
-        //Synchronize(user_data, link);
+        Synchronize(collision_data, link);
     }
+}
+
+void FCLCollisionChecker::Synchronize(LinkConstPtr const &link)
+{
+    return Synchronize(GetCollisionData(link->GetParent()), link);
 }
 
 void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
