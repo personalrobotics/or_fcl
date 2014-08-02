@@ -79,6 +79,12 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
+    // TODO: Implement CO_Distance.
+    // TODO: Implement CO_ActiveOnly.
+    // TODO: Implement CO_ActiveDOFs
+    // TODO: Populate the CollisionReport.
+    // TODO: Call collision callbacks.
+
     // Group 1: Argument.
     manager1_->clear();
     Synchronize(body1, &group1);
