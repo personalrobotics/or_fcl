@@ -113,9 +113,12 @@ private:
     typedef std::vector<fcl::CollisionObject *> CollisionGroup;
 
     std::string user_data_;
+    int options_;
     BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
     FCLUserDataPtr GetCollisionData(KinBodyConstPtr const &body) const;
+
+    bool RunCheck(CollisionReportPtr report);
 
     void Synchronize(CollisionGroup *group = NULL);
     void Synchronize(KinBodyConstPtr const &body,

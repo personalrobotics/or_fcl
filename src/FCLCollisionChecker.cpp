@@ -51,9 +51,11 @@ FCLUserData::~FCLUserData()
 /*
  * FCLCollisionChecker
  */
-FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env) : OpenRAVE::CollisionCheckerBase(env)
+FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
+    : OpenRAVE::CollisionCheckerBase(env)
     // Create a unique UserData key for this collision checker.
     , user_data_(str(format("or_fcl[%p]") % this))
+    , options_(0)
     , manager1_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
     , manager2_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
 {
@@ -79,11 +81,7 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
-    // TODO: Implement CO_Distance.
-    // TODO: Implement CO_ActiveOnly.
     // TODO: Implement CO_ActiveDOFs
-    // TODO: Populate the CollisionReport.
-    // TODO: Call collision callbacks.
 
     // Group 1: Argument.
     manager1_->clear();
@@ -106,11 +104,7 @@ bool FCLCollisionChecker::CheckCollision(
     manager2_->registerObjects(group2);
     manager2_->setup();
 
-    // Check.
-    CollisionQuery query;
-    manager1_->collide(manager2_.get(), &query,
-                       &FCLCollisionChecker::NarrowPhaseCheckCollision);
-    return query.result.isCollision();
+    return RunCheck(report);
 } 
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
@@ -129,6 +123,33 @@ FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
 {
     UserDataPtr const user_data = body->GetUserData(user_data_);
     return dynamic_pointer_cast<FCLUserData>(user_data);
+}
+
+bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
+{
+    if (report) {
+        RAVELOG_WARN("or_fcl does not currently populate CollisionReport.\n");
+    }
+
+    if (options_ | OpenRAVE::CO_Distance) {
+        throw OpenRAVE::openrave_exception(
+            "or_fcl does not currently support CO_Distance.",
+            OpenRAVE::ORE_NotImplemented
+        );
+    }
+    if (options_ | OpenRAVE::CO_Contacts) {
+        throw OpenRAVE::openrave_exception(
+            "or_fcl does not currently support CO_Contacts.",
+            OpenRAVE::ORE_NotImplemented
+        );
+    }
+
+    CollisionQuery query;
+    manager1_->collide(manager2_.get(), &query,
+                       &FCLCollisionChecker::NarrowPhaseCheckCollision);
+
+    return query.result.isCollision();
+    
 }
 
 void FCLCollisionChecker::Synchronize(CollisionGroup *group)
@@ -249,8 +270,8 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
 
     size_t const num_contacts = fcl::collide(o1, o2, query->request,
                                                      query->result);
-
-    return num_contacts > 0;
+    // TODO: Call collision callbacks.
+    return true;
 }
 
 fcl::Vec3f FCLCollisionChecker::ConvertVectorToFCL(Vector const &v) const
