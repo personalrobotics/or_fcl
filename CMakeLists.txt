@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS openrave_catkin)
 
 find_package(Boost REQUIRED COMPONENTS system)
 
+add_definitions(--std=c++0x)
 include_directories(${catkin_INCLUDE_DIRS})
 
 catkin_package(
