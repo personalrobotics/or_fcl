@@ -116,6 +116,11 @@ private:
 
     void Synchronize();
     FCLUserDataPtr Synchronize(KinBodyConstPtr const &body);
+    void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body);
+
+    static bool NarrowPhaseCheckCollision(
+        fcl::CollisionObject *o1, fcl::CollisionObject *o2, void *data
+    );
 
     fcl::Vec3f ConvertVectorToFCL(OpenRAVE::Vector const &v) const;
     fcl::Quaternion3f ConvertQuaternionToFCL(OpenRAVE::Vector const &v) const;

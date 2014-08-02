@@ -2,6 +2,7 @@
 #include <boost/format.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/unordered_map.hpp>
+#include <fcl/collision.h>
 #include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
 #include <fcl/shape/geometric_shapes.h>
 #include "FCLCollisionChecker.h"
@@ -20,9 +21,22 @@ using OpenRAVE::UserDataPtr;
 using OpenRAVE::Vector;
 
 typedef boost::shared_ptr<fcl::CollisionObject> CollisionObjectPtr;
+typedef OpenRAVE::KinBody::Link Link;
 typedef OpenRAVE::KinBody::LinkPtr LinkPtr;
 typedef OpenRAVE::KinBody::Link::Geometry Geometry;
 typedef OpenRAVE::KinBody::Link::GeometryPtr GeometryPtr;
+
+namespace {
+
+/*
+ * CollisionQuery
+ */
+struct CollisionQuery {
+    fcl::CollisionRequest request;
+    fcl::CollisionResult result;
+};
+
+}
 
 namespace or_fcl {
 
@@ -55,6 +69,7 @@ bool FCLCollisionChecker::InitEnvironment()
 
 void FCLCollisionChecker::DestroyEnvironment()
 {
+    broad_phase_->clear();
 }
 
 bool FCLCollisionChecker::CheckCollision(
@@ -62,9 +77,8 @@ bool FCLCollisionChecker::CheckCollision(
 {
     Synchronize();
 
-    fcl::CollisionData collision_data;
-    broad_phase_->collide(broad_phase_, &collision_data,
-                          &fcl::defaultCollisionFunction);
+    CollisionQuery query;
+    broad_phase_->collide(&query, &FCLCollisionChecker::NarrowPhaseCheckCollision);
 
     return false;
 } 
@@ -122,51 +136,66 @@ FCLUserDataPtr FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
             continue;
         }
 
-        OpenRAVE::Transform const link_pose = link->GetTransform();
+        //Synchronize(user_data, link);
+    }
+}
 
-        for (GeometryPtr const &geom : link->GetGeometries()) {
-            auto const result = collision_data->geometries.insert(
-                make_pair(geom.get(), CollisionObjectPtr())
-            );
-            CollisionObjectPtr &fcl_object = result.first->second;
+void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
+                                      LinkConstPtr const &link)
+{
+    OpenRAVE::Transform const link_pose = link->GetTransform();
 
-            // Convert the OpenRAVE geometry into FCL geometry. This is
-            // necessary if: (1) there is no existing FCL geometry for this
-            // shape or (2) the geometric is dynamic and could be modified at
-            // any time.
-            if (result.second || geom->IsModifiable()) {
-                CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(geom);
-                fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
-                RAVELOG_VERBOSE(
-                    "Created FCL geometry for KinBody[%s].Link[%s].Geometry[%p].\n",
-                    body->GetName().c_str(), link->GetName().c_str(), geom.get()
-                );
-            }
+    for (GeometryPtr const &geom : link->GetGeometries()) {
+        auto const result = collision_data->geometries.insert(
+            make_pair(geom.get(), CollisionObjectPtr())
+        );
+        CollisionObjectPtr &fcl_object = result.first->second;
 
-            // Update the pose of the FCL geometry to match the environment. We
-            // need to check for NULL here because some OpenRAVE geometry may
-            // not map to no FCL geometry (e.g. GT_None). We retain these NULLs
-            // to simplify bookkeeping when geometry is modified.
+        // Convert the OpenRAVE geometry into FCL geometry. This is
+        // necessary if: (1) there is no existing FCL geometry for this
+        // shape or (2) the geometric is dynamic and could be modified at
+        // any time.
+        if (result.second || geom->IsModifiable()) {
+            CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(geom);
+            fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
             if (fcl_object) {
-                OpenRAVE::Transform const &pose = link_pose * geom->GetTransform();
-                fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
-                fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
+                fcl_object->setUserData(const_cast<Link *>(link.get()));
             }
         }
 
-        // One or more geometries were dynamically removed from the OpenRAVE
-        // environment. Delete the associated FCL geometries.
-        size_t const num_or_geometries = link->GetGeometries().size();
-        size_t const num_fcl_geometries = collision_data->geometries.size();
-        BOOST_ASSERT(num_fcl_geometries >= num_or_geometries);
-
-        if (num_fcl_geometries > num_or_geometries) {
-            RAVELOG_WARN("Removing geometries from the environment may leak"
-                         " memory inside the FCL environment. Garbage"
-                         " collection is not currently implemented.");
+        // Update the pose of the FCL geometry to match the environment. We
+        // need to check for NULL here because some OpenRAVE geometry may
+        // not map to no FCL geometry (e.g. GT_None). We retain these NULLs
+        // to simplify bookkeeping when geometry is modified.
+        if (fcl_object) {
+            OpenRAVE::Transform const &pose = link_pose * geom->GetTransform();
+            fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
+            fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
         }
     }
-    return collision_data;
+
+    // One or more geometries were dynamically removed from the OpenRAVE
+    // environment. Delete the associated FCL geometries.
+    size_t const num_or_geometries = link->GetGeometries().size();
+    size_t const num_fcl_geometries = collision_data->geometries.size();
+    BOOST_ASSERT(num_fcl_geometries >= num_or_geometries);
+
+    if (num_fcl_geometries > num_or_geometries) {
+        RAVELOG_WARN("Removing geometries from the environment may leak"
+                     " memory inside the FCL environment. Garbage"
+                     " collection is not currently implemented.");
+    }
+}
+
+bool FCLCollisionChecker::NarrowPhaseCheckCollision(
+        fcl::CollisionObject *o1, fcl::CollisionObject *o2, void *data)
+{
+    auto const query = static_cast<CollisionQuery *>(data);
+
+    size_t const num_contacts = fcl::collide(o1, o2, query->request,
+                                                     query->result);
+
+    return num_contacts > 0;
 }
 
 fcl::Vec3f FCLCollisionChecker::ConvertVectorToFCL(Vector const &v) const
