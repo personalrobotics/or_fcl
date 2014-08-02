@@ -2,6 +2,7 @@
 #include <boost/format.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/unordered_map.hpp>
+#include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
 #include <fcl/shape/geometric_shapes.h>
 #include "FCLCollisionChecker.h"
 
@@ -39,6 +40,7 @@ FCLUserData::~FCLUserData()
 FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env) : OpenRAVE::CollisionCheckerBase(env)
     // Create a unique UserData key for this collision checker.
     , user_data_(str(format("or_fcl[%p]") % this))
+    , broad_phase_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
 {
 }
 
@@ -55,6 +57,18 @@ void FCLCollisionChecker::DestroyEnvironment()
 {
 }
 
+bool FCLCollisionChecker::CheckCollision(
+    KinBodyConstPtr pbody1, CollisionReportPtr report)
+{
+    Synchronize();
+
+    fcl::CollisionData collision_data;
+    broad_phase_->collide(broad_phase_, &collision_data,
+                          &fcl::defaultCollisionFunction);
+
+    return false;
+} 
+
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
 {
     body->SetUserData(user_data_, make_shared<FCLUserData>());
@@ -68,6 +82,9 @@ void FCLCollisionChecker::RemoveKinBody(KinBodyPtr body)
 
 void FCLCollisionChecker::Synchronize()
 {
+    // TODO: It might be possible to speed this up by intelligently re-using
+    // parts of the broad-phase checker between queries. See the update
+    // functions.
     broad_phase_->clear();
 
     std::vector<KinBodyPtr> bodies;
@@ -112,8 +129,6 @@ FCLUserDataPtr FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
                 make_pair(geom.get(), CollisionObjectPtr())
             );
             CollisionObjectPtr &fcl_object = result.first->second;
-
-            // TODO: Don't bother syncing geometry that is not enabled.
 
             // Convert the OpenRAVE geometry into FCL geometry. This is
             // necessary if: (1) there is no existing FCL geometry for this
