@@ -110,17 +110,22 @@ private:
     typedef fcl::BVHModel<fcl::OBBRSS> BVHModel;
     typedef boost::shared_ptr<BVHModel> BVHModelPtr;
     typedef boost::shared_ptr<fcl::CollisionGeometry> CollisionGeometryPtr;
+    typedef std::vector<fcl::CollisionObject *> CollisionGroup;
 
     std::string user_data_;
-    BroadPhaseCollisionManagerPtr broad_phase_;
+    BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
     FCLUserDataPtr GetCollisionData(KinBodyConstPtr const &body) const;
 
-    void Synchronize();
-    void Synchronize(KinBodyConstPtr const &body);
-    void Synchronize(FCLUserDataPtr const &user_data, KinBodyConstPtr const &body);
-    void Synchronize(LinkConstPtr const &body);
-    void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body);
+    void Synchronize(CollisionGroup *group = NULL);
+    void Synchronize(KinBodyConstPtr const &body,
+                     CollisionGroup *group = NULL);
+    void Synchronize(FCLUserDataPtr const &user_data, KinBodyConstPtr const &body,
+                     CollisionGroup *group = NULL);
+    void Synchronize(LinkConstPtr const &body,
+                     CollisionGroup *group = NULL);
+    void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body,
+                     CollisionGroup *group= NULL);
 
     static bool NarrowPhaseCheckCollision(
         fcl::CollisionObject *o1, fcl::CollisionObject *o2, void *data

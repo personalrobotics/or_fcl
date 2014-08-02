@@ -54,7 +54,8 @@ FCLUserData::~FCLUserData()
 FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env) : OpenRAVE::CollisionCheckerBase(env)
     // Create a unique UserData key for this collision checker.
     , user_data_(str(format("or_fcl[%p]") % this))
-    , broad_phase_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
+    , manager1_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
+    , manager2_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
 {
 }
 
@@ -69,18 +70,41 @@ bool FCLCollisionChecker::InitEnvironment()
 
 void FCLCollisionChecker::DestroyEnvironment()
 {
-    broad_phase_->clear();
+    manager1_->clear();
+    manager2_->clear();
 }
 
 bool FCLCollisionChecker::CheckCollision(
-    KinBodyConstPtr pbody1, CollisionReportPtr report)
+    KinBodyConstPtr body1, CollisionReportPtr report)
 {
-    Synchronize();
+    CollisionGroup group1, group2;
 
+    // Group 1: Argument.
+    manager1_->clear();
+    Synchronize(body1, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: Everything else in the environment.
+    manager2_->clear();
+
+    std::vector<KinBodyPtr> bodies;
+    GetEnv()->GetBodies(bodies);
+
+    for (KinBodyPtr const &body2 : bodies) {
+        if (body2 != body1 && body2->IsEnabled()) {
+            Synchronize(body2, &group2);
+        }
+    }
+
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    // Check.
     CollisionQuery query;
-    broad_phase_->collide(&query, &FCLCollisionChecker::NarrowPhaseCheckCollision);
-
-    return false;
+    manager1_->collide(manager2_.get(), &query,
+                       &FCLCollisionChecker::NarrowPhaseCheckCollision);
+    return query.result.isCollision();
 } 
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
@@ -101,8 +125,9 @@ FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
     return dynamic_pointer_cast<FCLUserData>(user_data);
 }
 
-void FCLCollisionChecker::Synchronize()
+void FCLCollisionChecker::Synchronize(CollisionGroup *group)
 {
+#if 0
     // TODO: It might be possible to speed this up by intelligently re-using
     // parts of the broad-phase checker between queries. See the update
     // functions.
@@ -131,32 +156,37 @@ void FCLCollisionChecker::Synchronize()
     }
 
     broad_phase_->setup();
+#endif
 }
 
-void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
+void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
+                                      CollisionGroup *group)
 {
-    return Synchronize(GetCollisionData(body), body);
+    return Synchronize(GetCollisionData(body), body, group);
 }
 
 void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
-                                      KinBodyConstPtr const &body)
+                                      KinBodyConstPtr const &body,
+                                      CollisionGroup *group)
 {
     for (LinkPtr const &link : body->GetLinks()) {
         if (!link->IsEnabled()) {
             continue;
         }
 
-        Synchronize(collision_data, link);
+        Synchronize(collision_data, link, group);
     }
 }
 
-void FCLCollisionChecker::Synchronize(LinkConstPtr const &link)
+void FCLCollisionChecker::Synchronize(LinkConstPtr const &link,
+                                      CollisionGroup *group)
 {
-    return Synchronize(GetCollisionData(link->GetParent()), link);
+    return Synchronize(GetCollisionData(link->GetParent()), link, group);
 }
 
 void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
-                                      LinkConstPtr const &link)
+                                      LinkConstPtr const &link,
+                                      CollisionGroup *group)
 {
     OpenRAVE::Transform const link_pose = link->GetTransform();
 
@@ -186,6 +216,10 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             OpenRAVE::Transform const &pose = link_pose * geom->GetTransform();
             fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
             fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
+
+            if (group) {
+                group->push_back(fcl_object.get());
+            }
         }
     }
 
