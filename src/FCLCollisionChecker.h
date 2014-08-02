@@ -88,6 +88,10 @@ private:
 
     std::string user_data_;
 
+    void Synchronize(KinBodyConstPtr const &body);
+
+    fcl::Vec3f ConvertVectorToFCL(OpenRAVE::Vector const &v) const;
+    fcl::Quaternion3f ConvertQuaternionToFCL(OpenRAVE::Vector const &v) const;
     CollisionGeometryPtr ConvertGeometryToFCL(GeometryConstPtr const &geom) const;
 
 
