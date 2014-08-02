@@ -1,13 +1,33 @@
 #ifndef FCLCOLLISIONCHECKER_H_
 #define FCLCOLLISIONCHECKER_H_
+#include <boost/unordered_map.hpp>
 #include <openrave/openrave.h>
 #include <fcl/BVH/BVH_model.h>
+#include <fcl/broadphase/broadphase.h>
 #include <fcl/collision_object.h>
 
 #define OR_FCL_DUMMY_IMPLEMENTATION { throw OpenRAVE::openrave_exception("not implemented", OpenRAVE::ORE_NotImplemented); }
 
 namespace or_fcl {
 
+/*
+ * FCLUserData
+ */
+struct FCLUserData : public OpenRAVE::UserData {
+    virtual ~FCLUserData();
+
+    boost::unordered_map<
+            OpenRAVE::KinBody::Link::Geometry const *,
+            boost::shared_ptr<fcl::CollisionObject>
+        > geometries;
+};
+
+typedef boost::shared_ptr<FCLUserData> FCLUserDataPtr;
+
+
+/*
+ * FCLCollisionChecker
+ */
 class FCLCollisionChecker : public OpenRAVE::CollisionCheckerBase {
 public:
     typedef OpenRAVE::KinBodyConstPtr KinBodyConstPtr;
@@ -15,8 +35,6 @@ public:
     typedef OpenRAVE::KinBody::Link::GeometryConstPtr GeometryConstPtr;
     typedef OpenRAVE::CollisionReportPtr CollisionReportPtr;
     typedef OpenRAVE::RAY RAY;
-    typedef fcl::BVHModel<fcl::OBBRSS> BVHModel;
-    typedef boost::shared_ptr<BVHModel> BVHModelPtr;
 
     FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env);
     virtual ~FCLCollisionChecker();
@@ -84,11 +102,16 @@ public:
     ) OR_FCL_DUMMY_IMPLEMENTATION;
 
 private:
+    typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
+    typedef fcl::BVHModel<fcl::OBBRSS> BVHModel;
+    typedef boost::shared_ptr<BVHModel> BVHModelPtr;
     typedef boost::shared_ptr<fcl::CollisionGeometry> CollisionGeometryPtr;
 
     std::string user_data_;
+    BroadPhaseCollisionManagerPtr broad_phase_;
 
-    void Synchronize(KinBodyConstPtr const &body);
+    void Synchronize();
+    FCLUserDataPtr Synchronize(KinBodyConstPtr const &body);
 
     fcl::Vec3f ConvertVectorToFCL(OpenRAVE::Vector const &v) const;
     fcl::Quaternion3f ConvertQuaternionToFCL(OpenRAVE::Vector const &v) const;

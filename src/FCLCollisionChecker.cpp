@@ -1,3 +1,4 @@
+#include <boost/range/adaptor/map.hpp>
 #include <boost/format.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/unordered_map.hpp>
@@ -5,6 +6,7 @@
 #include "FCLCollisionChecker.h"
 
 using std::make_pair;
+using boost::adaptors::map_values;
 using boost::dynamic_pointer_cast;
 using boost::format;
 using boost::make_shared;
@@ -21,24 +23,15 @@ typedef OpenRAVE::KinBody::LinkPtr LinkPtr;
 typedef OpenRAVE::KinBody::Link::Geometry Geometry;
 typedef OpenRAVE::KinBody::Link::GeometryPtr GeometryPtr;
 
-namespace {
+namespace or_fcl {
 
 /*
  * FCLUserData
  */
-struct FCLUserData : public UserData {
-    virtual ~FCLUserData();
-
-    unordered_map<Geometry const *, CollisionObjectPtr> geometries;
-};
-
 FCLUserData::~FCLUserData()
 {
 }
 
-}
-
-namespace or_fcl {
 
 /*
  * FCLCollisionChecker
@@ -82,7 +75,33 @@ void FCLCollisionChecker::RemoveKinBody(KinBodyPtr body)
     body->RemoveUserData(user_data_);
 }
 
-void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
+void FCLCollisionChecker::Synchronize()
+{
+    broad_phase_->clear();
+
+    std::vector<KinBodyPtr> bodies;
+    GetEnv()->GetBodies(bodies);
+    for (KinBodyPtr const &body : bodies) {
+        // Skip objects that are disabled.
+        if (!body->IsEnabled()) {
+            continue;
+        }
+
+        // Synchronize this object with the FCL environment.
+        FCLUserDataPtr const collision_data = Synchronize(body);
+
+        // Register the object's geometry with the broad-phase checker.
+        for (CollisionObjectPtr const &collision_object
+                : collision_data->geometries | map_values) {
+            // TODO: Check if this geometry is enabled.
+            broad_phase_->registerObject(collision_object.get());
+        }
+    }
+
+    broad_phase_->setup();
+}
+
+FCLUserDataPtr FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
 {
     UserDataPtr const user_data = body->GetUserData(user_data_);
     auto const collision_data = dynamic_pointer_cast<FCLUserData>(user_data);
@@ -135,11 +154,8 @@ void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body)
                           " collection is not currently implemented.");
         }
     }
+    return collision_data;
 }
-
-#if 0
-  CollisionObject(const boost::shared_ptr<CollisionGeometry> &cgeom_, const Transform3f& tf) : cgeom(cgeom_), t(tf)
-#endif
 
 fcl::Vec3f FCLCollisionChecker::ConvertVectorToFCL(Vector const &v) const
 {
