@@ -57,16 +57,7 @@ void FCLCollisionChecker::DestroyEnvironment()
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
 {
-    //body->SetUserData(user_data_, NULL);
-    //
-    //
-
-#if 0
-    for (GeometryPtr const &geom : body->GetGeometries()) {
-        CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(geom);
-    }
-#endif
-
+    body->SetUserData(user_data_, make_shared<FCLUserData>());
     return true;
 }
 
