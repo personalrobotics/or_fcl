@@ -14,6 +14,10 @@ using boost::format;
 using boost::make_shared;
 using boost::unordered_map;
 using boost::str;
+using OpenRAVE::CollisionAction;
+using OpenRAVE::CollisionReport;
+using OpenRAVE::CollisionReportPtr;
+using OpenRAVE::EnvironmentBasePtr;
 using OpenRAVE::KinBodyPtr;
 using OpenRAVE::TriMesh;
 using OpenRAVE::UserData;
@@ -25,6 +29,7 @@ typedef OpenRAVE::KinBody::Link Link;
 typedef OpenRAVE::KinBody::LinkPtr LinkPtr;
 typedef OpenRAVE::KinBody::Link::Geometry Geometry;
 typedef OpenRAVE::KinBody::Link::GeometryPtr GeometryPtr;
+typedef OpenRAVE::EnvironmentBase::CollisionCallbackFn CollisionCallbackFn;
 
 namespace {
 
@@ -32,8 +37,12 @@ namespace {
  * CollisionQuery
  */
 struct CollisionQuery {
+    EnvironmentBasePtr env;
     fcl::CollisionRequest request;
     fcl::CollisionResult result;
+    CollisionReportPtr report;
+    std::list<CollisionCallbackFn> callbacks;
+    bool is_collision;
 };
 
 }
@@ -55,6 +64,7 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
     : OpenRAVE::CollisionCheckerBase(env)
     // Create a unique UserData key for this collision checker.
     , user_data_(str(format("or_fcl[%p]") % this))
+    , num_contacts_(100)
     , options_(0)
     , manager1_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
     , manager2_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
@@ -151,6 +161,17 @@ void FCLCollisionChecker::RemoveKinBody(KinBodyPtr body)
     body->RemoveUserData(user_data_);
 }
 
+auto FCLCollisionChecker::GetCollisionLink(
+        fcl::CollisionObject const &o) -> LinkConstPtr
+{
+    void *user_data = o.getUserData();
+    Link const *link_raw = static_cast<Link const *>(user_data);
+
+    // Reconstruct a shared_ptr.
+    size_t const index = link_raw->GetIndex();
+    return link_raw->GetParent()->GetLinks()[index];
+}
+
 FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
         KinBodyConstPtr const &body) const
 {
@@ -160,26 +181,23 @@ FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
 
 bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
 {
-    if (report) {
-        RAVELOG_WARN("or_fcl does not currently populate CollisionReport.\n");
-    }
+    CollisionQuery query;
+    query.env = GetEnv();
+    query.report = report;
+    query.env->GetRegisteredCollisionCallbacks(query.callbacks);
 
-#if 0
-    if (options_ | OpenRAVE::CO_Distance) {
+    if (options_ & OpenRAVE::CO_Distance) {
         throw OpenRAVE::openrave_exception(
             "or_fcl does not currently support CO_Distance.",
             OpenRAVE::ORE_NotImplemented
         );
     }
-    if (options_ | OpenRAVE::CO_Contacts) {
-        throw OpenRAVE::openrave_exception(
-            "or_fcl does not currently support CO_Contacts.",
-            OpenRAVE::ORE_NotImplemented
-        );
-    }
-#endif
 
-    CollisionQuery query;
+    if (options_ | OpenRAVE::CO_Contacts) {
+        query.request.enable_contact = true;
+        query.request.num_max_contacts = num_contacts_;
+    }
+
     manager1_->collide(manager2_.get(), &query,
                        &FCLCollisionChecker::NarrowPhaseCheckCollision);
 
@@ -245,8 +263,6 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
             fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
 
-            RAVELOG_INFO("Created FCL object\n");
-
             if (group) {
                 group->push_back(fcl_object.get());
             }
@@ -255,6 +271,9 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
 
     // One or more geometries were dynamically removed from the OpenRAVE
     // environment. Delete the associated FCL geometries.
+    // TODO: This logic only works if we maintain a separate list of geometries
+    // for each link. Otherwise we can only GC at the KinBody level.
+#if 0
     size_t const num_or_geometries = link->GetGeometries().size();
     size_t const num_fcl_geometries = collision_data->geometries.size();
     BOOST_ASSERT(num_fcl_geometries >= num_or_geometries);
@@ -262,6 +281,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
     if (num_fcl_geometries > num_or_geometries) {
         // TODO: Cleanup geometries.
     }
+#endif
 }
 
 bool FCLCollisionChecker::NarrowPhaseCheckCollision(
@@ -271,16 +291,61 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
 
     size_t const num_contacts = fcl::collide(o1, o2, query->request,
                                                      query->result);
-    // TODO: Call collision callbacks.
-    return true;
+
+    if (num_contacts > 0) {
+        // If an output report was specified, fill it in.
+        if (query->report) {
+            query->report->plink1 = GetCollisionLink(*o1);
+            query->report->plink2 = GetCollisionLink(*o2);
+            query->report->vLinkColliding.push_back(query->report->plink2);
+            // TODO: Update numCols.
+        }
+
+        // Call any collision callbacks. Ignore this collision if any of the
+        // callbacks return CA_Ignore.
+        CollisionAction action = OpenRAVE::CA_DefaultAction;
+        for (CollisionCallbackFn const &callback : query->callbacks) {
+            action = callback(query->report, false);
+            if (action == OpenRAVE::CA_Ignore) { return false; // Keep going.
+            }
+        }
+
+        // Store contact information if CO_Contacts is enabled.
+        if (query->report && query->request.enable_contact) {
+            for (size_t icontact = 0; icontact < num_contacts; ++icontact) {
+                fcl::Contact const &contact =  query->result.getContact(icontact);
+                query->report->contacts.push_back(ConvertContactToOR(contact));
+            }
+        }
+
+        // Otherwise, note that a collision occurred and short-circuit.
+        query->is_collision = true;
+        return true; // Stop checking.
+    }
+    return false; // Keep going.
 }
 
-fcl::Vec3f FCLCollisionChecker::ConvertVectorToFCL(Vector const &v) const
+Vector FCLCollisionChecker::ConvertVectorToOR(fcl::Vec3f const &v)
+{
+    return Vector(v[0], v[1], v[2]);
+}
+
+CollisionReport::CONTACT FCLCollisionChecker::ConvertContactToOR(
+        fcl::Contact const &contact)
+{
+    CollisionReport::CONTACT or_contact;
+    or_contact.pos = ConvertVectorToOR(contact.pos);
+    or_contact.norm = ConvertVectorToOR(contact.normal);
+    or_contact.depth = contact.penetration_depth;
+    return or_contact;
+}
+
+fcl::Vec3f FCLCollisionChecker::ConvertVectorToFCL(Vector const &v)
 {
     return fcl::Vec3f(v.x, v.y, v.z);
 }
 
-fcl::Quaternion3f FCLCollisionChecker::ConvertQuaternionToFCL(Vector const &v) const
+fcl::Quaternion3f FCLCollisionChecker::ConvertQuaternionToFCL(Vector const &v)
 {
     // OpenRAVE and FCL both use the (scalar, vector) convention. Remember to
     // never use the named attributes on OpenRAVE::Vector to access quaternion
@@ -289,27 +354,42 @@ fcl::Quaternion3f FCLCollisionChecker::ConvertQuaternionToFCL(Vector const &v) c
 }
 
 auto FCLCollisionChecker::ConvertGeometryToFCL(
-        GeometryConstPtr const &geom) const -> CollisionGeometryPtr
+        GeometryConstPtr const &geom) -> CollisionGeometryPtr
 {
     switch (geom->GetType()) {
     case OpenRAVE::GT_None:
         return CollisionGeometryPtr();
 
     case OpenRAVE::GT_Box: {
-        // OpenRAVE's extents are actually half-extents.
         OpenRAVE::Vector const extents = geom->GetBoxExtents();
-        return make_shared<fcl::Box>(
-            2 * extents[0], 2 * extents[1], 2 * extents[2]
-        );
+
+        if (extents[0] != 0 || extents[1] != 0 || extents[2] != 0) {
+            // OpenRAVE's extents are actually half-extents.
+            return make_shared<fcl::Box>(
+                2 * extents[0], 2 * extents[1], 2 * extents[2]
+            );
+        } else {
+            return CollisionGeometryPtr();
+        }
     }
 
     case OpenRAVE::GT_Cylinder:
-        return make_shared<fcl::Cylinder>(
-            geom->GetCylinderRadius(), geom->GetCylinderHeight()
-        );
+        // TODO: I'm not sure what the coordinate frame convention is for
+        // cylinders in FCL.
+        if (geom->GetCylinderRadius() != 0 || geom->GetCylinderHeight() != 0) {
+            return make_shared<fcl::Cylinder>(
+                geom->GetCylinderRadius(), geom->GetCylinderHeight()
+            );
+        } else {
+            return CollisionGeometryPtr();
+        }
 
     case OpenRAVE::GT_Sphere:
-        return make_shared<fcl::Sphere>(geom->GetSphereRadius());
+        if (geom->GetSphereRadius() != 0) {
+            return make_shared<fcl::Sphere>(geom->GetSphereRadius());
+        } else {
+            return CollisionGeometryPtr();
+        }
 
     case OpenRAVE::GT_TriMesh: {
         TriMesh const &mesh = geom->GetCollisionMesh();

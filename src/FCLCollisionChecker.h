@@ -2,6 +2,7 @@
 #define FCLCOLLISIONCHECKER_H_
 #include <boost/unordered_map.hpp>
 #include <openrave/openrave.h>
+#include <fcl/collision_data.h>
 #include <fcl/BVH/BVH_model.h>
 #include <fcl/broadphase/broadphase.h>
 #include <fcl/collision_object.h>
@@ -113,6 +114,7 @@ private:
     typedef std::vector<fcl::CollisionObject *> CollisionGroup;
 
     std::string user_data_;
+    int num_contacts_;
     int options_;
     BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
@@ -129,13 +131,18 @@ private:
     void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body,
                      CollisionGroup *group= NULL);
 
+    static LinkConstPtr GetCollisionLink(fcl::CollisionObject const &o);
     static bool NarrowPhaseCheckCollision(
         fcl::CollisionObject *o1, fcl::CollisionObject *o2, void *data
     );
 
-    fcl::Vec3f ConvertVectorToFCL(OpenRAVE::Vector const &v) const;
-    fcl::Quaternion3f ConvertQuaternionToFCL(OpenRAVE::Vector const &v) const;
-    CollisionGeometryPtr ConvertGeometryToFCL(GeometryConstPtr const &geom) const;
+    static fcl::Vec3f ConvertVectorToFCL(OpenRAVE::Vector const &v);
+    static fcl::Quaternion3f ConvertQuaternionToFCL(OpenRAVE::Vector const &v);
+    static CollisionGeometryPtr ConvertGeometryToFCL(GeometryConstPtr const &geom);
+
+    static OpenRAVE::Vector ConvertVectorToOR(fcl::Vec3f const &v);
+    static OpenRAVE::CollisionReport::CONTACT ConvertContactToOR(
+            fcl::Contact const &contact);
 
 
 };
