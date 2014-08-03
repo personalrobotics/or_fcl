@@ -109,7 +109,11 @@ public:
 
 private:
     typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
-    typedef fcl::BVHModel<fcl::OBBRSS> BVHModel;
+    typedef fcl::BVHModel<fcl::OBB> BVHModel;
+    //typedef fcl::BVHModel<fcl::RSS> BVHModel;
+    //typedef fcl::BVHModel<fcl::OBBRSS> BVHModel;
+    //typedef fcl::BVHModel<fcl::AABB> BVHModel;
+    //typedef fcl::BVHModel<fcl::kIOS> BVHModel;
     typedef boost::shared_ptr<BVHModel> BVHModelPtr;
     typedef boost::shared_ptr<fcl::CollisionGeometry> CollisionGeometryPtr;
     typedef std::vector<fcl::CollisionObject *> CollisionGroup;

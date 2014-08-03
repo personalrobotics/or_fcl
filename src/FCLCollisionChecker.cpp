@@ -45,12 +45,19 @@ namespace {
  * CollisionQuery
  */
 struct CollisionQuery {
+    CollisionQuery()
+        : is_collision(false)
+        , num_narrow(0)
+    {
+    }
+
     EnvironmentBasePtr env;
     fcl::CollisionRequest request;
     fcl::CollisionResult result;
     CollisionReportPtr report;
     std::list<CollisionCallbackFn> callbacks;
     bool is_collision;
+    int num_narrow;
 };
 
 }
@@ -75,7 +82,7 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
     , num_contacts_(100)
     , options_(0)
 {
-    SetBroadphaseAlgorithm("DynamicAABBTree");
+    SetBroadphaseAlgorithm("SSaP");
 }
 
 FCLCollisionChecker::~FCLCollisionChecker()
@@ -397,9 +404,18 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
         report->contacts.clear();
     }
 
+#if 1
+    std::vector<fcl::CollisionObject *> objects1; 
+    manager1_->getObjects(objects1);
+
+    for (fcl::CollisionObject * const object1 : objects1) {
+        manager2_->collide(object1, &query,
+                           &FCLCollisionChecker::NarrowPhaseCheckCollision);
+    }
+#else
     manager1_->collide(manager2_.get(), &query,
                        &FCLCollisionChecker::NarrowPhaseCheckCollision);
-
+#endif
     return query.result.isCollision();
     
 }
@@ -459,6 +475,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             OpenRAVE::Transform const &pose = link_pose * geom->GetTransform();
             fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
             fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
+            fcl_object->computeAABB();
 
             if (group) {
                 group->push_back(fcl_object.get());
@@ -491,9 +508,12 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
     }
 
     auto const query = static_cast<CollisionQuery *>(data);
-
     size_t const num_contacts = fcl::collide(o1, o2, query->request,
                                                      query->result);
+    query->num_narrow++;
+
+    LinkConstPtr const plink1 = GetCollisionLink(*o1);
+    LinkConstPtr const plink2 = GetCollisionLink(*o2);
 
     if (num_contacts > 0) {
         // If an output report was specified, fill it in.
