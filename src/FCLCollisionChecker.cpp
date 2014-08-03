@@ -345,7 +345,7 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
         );
     }
 
-    if (options_ | OpenRAVE::CO_Contacts) {
+    if (options_ & OpenRAVE::CO_Contacts) {
         query.request.enable_contact = true;
         query.request.num_max_contacts = num_contacts_;
     }
