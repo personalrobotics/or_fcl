@@ -312,9 +312,10 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
 
         // Store contact information if CO_Contacts is enabled.
         if (query->report && query->request.enable_contact) {
+            query->report->contacts.resize(num_contacts);
             for (size_t icontact = 0; icontact < num_contacts; ++icontact) {
                 fcl::Contact const &contact =  query->result.getContact(icontact);
-                query->report->contacts.push_back(ConvertContactToOR(contact));
+                query->report->contacts[icontact] = ConvertContactToOR(contact);
             }
         }
 
