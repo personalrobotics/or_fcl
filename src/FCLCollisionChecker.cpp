@@ -83,6 +83,7 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
     , options_(0)
 {
     SetBroadphaseAlgorithm("SSaP");
+    SetBVHRepresentation("OBB");
 }
 
 FCLCollisionChecker::~FCLCollisionChecker()
@@ -125,6 +126,26 @@ void FCLCollisionChecker::SetBroadphaseAlgorithm(
     } else {
         throw OpenRAVE::openrave_exception(
             str(format("Unknown broad-phase algorithm '%s'.") % algorithm),
+            OpenRAVE::ORE_InvalidArguments
+        );
+    }
+}
+
+void FCLCollisionChecker::SetBVHRepresentation(std::string const &type)
+{
+    if (type == "AABB") {
+        mesh_factory_ = &FCLCollisionChecker::ConvertMeshToFCL<fcl::AABB>;
+    } else if (type == "OBB") {
+        mesh_factory_ = &FCLCollisionChecker::ConvertMeshToFCL<fcl::OBB>;
+    } else if (type == "RSS") {
+        mesh_factory_ = &FCLCollisionChecker::ConvertMeshToFCL<fcl::RSS>;
+    } else if (type == "OBBRSS") {
+        mesh_factory_ = &FCLCollisionChecker::ConvertMeshToFCL<fcl::OBBRSS>;
+    } else if (type == "kIDS") {
+        mesh_factory_ = &FCLCollisionChecker::ConvertMeshToFCL<fcl::AABB>;
+    } else {
+        throw OpenRAVE::openrave_exception(
+            str(format("Unknown BVH representation '%s'.") % type),
             OpenRAVE::ORE_InvalidArguments
         );
     }
@@ -460,7 +481,9 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
         // shape or (2) the geometric is dynamic and could be modified at
         // any time.
         if (result.second) { // || geom->IsModifiable()) {
-            CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(geom);
+            CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(
+                mesh_factory_, geom
+            );
             if (fcl_geom) {
                 fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
                 fcl_object->setUserData(const_cast<Link *>(link.get()));
@@ -472,6 +495,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
         // not map to no FCL geometry (e.g. GT_None). We retain these NULLs
         // to simplify bookkeeping when geometry is modified.
         if (fcl_object) {
+            // TODO: Only update the object's pose if it's changed.
             OpenRAVE::Transform const &pose = link_pose * geom->GetTransform();
             fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
             fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
@@ -578,6 +602,7 @@ fcl::Quaternion3f FCLCollisionChecker::ConvertQuaternionToFCL(Vector const &v)
 }
 
 auto FCLCollisionChecker::ConvertGeometryToFCL(
+        MeshFactory const &mesh_factory,
         GeometryConstPtr const &geom) -> CollisionGeometryPtr
 {
     switch (geom->GetType()) {
@@ -642,12 +667,7 @@ auto FCLCollisionChecker::ConvertGeometryToFCL(
             );
         }
 
-        // Create the FCL mesh.
-        auto const model = boost::make_shared<BVHModel>();
-        model->beginModel(mesh.indices.size(), mesh.vertices.size());
-        model->addSubModel(fcl_points, fcl_triangles);
-        model->endModel();
-        return model;
+        return mesh_factory(fcl_points, fcl_triangles);
     }
 
     default:
@@ -656,6 +676,18 @@ auto FCLCollisionChecker::ConvertGeometryToFCL(
             OpenRAVE::ORE_InvalidArguments
         );
     }
+}
+
+template <class T>
+auto FCLCollisionChecker::ConvertMeshToFCL(
+    std::vector<fcl::Vec3f> const &points,
+    std::vector<fcl::Triangle> const &triangles) -> CollisionGeometryPtr
+{
+    auto const model = make_shared<fcl::BVHModel<T> >();
+    model->beginModel(triangles.size(), points.size());
+    model->addSubModel(points, triangles);
+    model->endModel();
+    return model;
 }
 
 }

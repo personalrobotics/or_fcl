@@ -47,7 +47,9 @@ public:
     virtual bool SetCollisionOptions(int collision_options);
     virtual int GetCollisionOptions() const;
     virtual void SetTolerance(OpenRAVE::dReal tolerance) OR_FCL_DUMMY_IMPLEMENTATION;
+
     void SetBroadphaseAlgorithm(std::string const &algorithm);
+    void SetBVHRepresentation(std::string const &type);
 
     virtual bool InitEnvironment();
     virtual void DestroyEnvironment();
@@ -109,18 +111,17 @@ public:
 
 private:
     typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
-    typedef fcl::BVHModel<fcl::OBB> BVHModel;
-    //typedef fcl::BVHModel<fcl::RSS> BVHModel;
-    //typedef fcl::BVHModel<fcl::OBBRSS> BVHModel;
-    //typedef fcl::BVHModel<fcl::AABB> BVHModel;
-    //typedef fcl::BVHModel<fcl::kIOS> BVHModel;
-    typedef boost::shared_ptr<BVHModel> BVHModelPtr;
     typedef boost::shared_ptr<fcl::CollisionGeometry> CollisionGeometryPtr;
     typedef std::vector<fcl::CollisionObject *> CollisionGroup;
+    typedef boost::function<
+        CollisionGeometryPtr (std::vector<fcl::Vec3f> const &points,
+                              std::vector<fcl::Triangle> const &triangles)
+        > MeshFactory;
 
     std::string user_data_;
     int num_contacts_;
     int options_;
+    MeshFactory mesh_factory_;
     BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
     FCLUserDataPtr GetCollisionData(KinBodyConstPtr const &body) const;
@@ -143,7 +144,15 @@ private:
 
     static fcl::Vec3f ConvertVectorToFCL(OpenRAVE::Vector const &v);
     static fcl::Quaternion3f ConvertQuaternionToFCL(OpenRAVE::Vector const &v);
-    static CollisionGeometryPtr ConvertGeometryToFCL(GeometryConstPtr const &geom);
+    static CollisionGeometryPtr ConvertGeometryToFCL(
+        MeshFactory const &mesh_factory, GeometryConstPtr const &geom
+    );
+
+    template <class T>
+    static CollisionGeometryPtr ConvertMeshToFCL(
+        std::vector<fcl::Vec3f> const &points,
+        std::vector<fcl::Triangle> const &triangles
+    );
 
     static OpenRAVE::Vector ConvertVectorToOR(fcl::Vec3f const &v);
     static OpenRAVE::CollisionReport::CONTACT ConvertContactToOR(
