@@ -164,7 +164,8 @@ private:
     static OpenRAVE::CollisionReport::CONTACT ConvertContactToOR(
             fcl::Contact const &contact);
 
-
+    bool AreEqual(fcl::Vec3f const &x, fcl::Vec3f const &y) const;
+    bool AreEqual(fcl::Quaternion3f const &x, fcl::Quaternion3f const &y) const;
 };
 
 }

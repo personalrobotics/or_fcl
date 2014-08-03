@@ -581,9 +581,16 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
         if (fcl_object) {
             // TODO: Only update the object's pose if it's changed.
             OpenRAVE::Transform const &pose = link_pose * geom->GetTransform();
-            fcl_object->setTranslation(ConvertVectorToFCL(pose.trans));
-            fcl_object->setQuatRotation(ConvertQuaternionToFCL(pose.rot));
-            fcl_object->computeAABB();
+            fcl::Vec3f const new_position = ConvertVectorToFCL(pose.trans);
+            fcl::Quaternion3f const new_orientation = ConvertQuaternionToFCL(pose.rot);
+
+            // Only recompute the AABB if the pose changed.
+            if (!AreEqual(new_position, fcl_object->getTranslation())
+             || !AreEqual(new_orientation, fcl_object->getQuatRotation())) {
+                fcl_object->setTranslation(new_position);
+                fcl_object->setQuatRotation(new_orientation);
+                fcl_object->computeAABB();
+            }
 
             if (group) {
                 group->push_back(fcl_object.get());
@@ -775,6 +782,20 @@ auto FCLCollisionChecker::ConvertMeshToFCL(
     model->addSubModel(points, triangles);
     model->endModel();
     return model;
+}
+
+bool FCLCollisionChecker::AreEqual(fcl::Vec3f const &x,
+                                   fcl::Vec3f const &y) const
+{
+    return x[0] == y[0] && x[1] == y[1] && x[2] == y[2];
+}
+
+bool FCLCollisionChecker::AreEqual(fcl::Quaternion3f const &x,
+                                   fcl::Quaternion3f const &y) const
+{
+    // We only need to check three components since a quaternion only has three
+    // degrees of freedom (it has unit length.
+    return x.getX() == y.getX() && x.getY() == y.getY() && x.getZ() == y.getZ();
 }
 
 }
