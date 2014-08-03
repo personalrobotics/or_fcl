@@ -2,6 +2,7 @@
 #include <boost/format.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/unordered_set.hpp>
 #include <fcl/collision.h>
 #include <fcl/shape/geometric_shapes.h>
 #include "FCLCollisionChecker.h"
@@ -28,6 +29,8 @@ using OpenRAVE::CollisionReportPtr;
 using OpenRAVE::EnvironmentBasePtr;
 using OpenRAVE::KinBodyPtr;
 using OpenRAVE::TriMesh;
+using OpenRAVE::RobotBase;
+using OpenRAVE::RobotBaseConstPtr;
 using OpenRAVE::UserData;
 using OpenRAVE::UserDataPtr;
 using OpenRAVE::Vector;
@@ -37,6 +40,8 @@ typedef OpenRAVE::KinBody::Link Link;
 typedef OpenRAVE::KinBody::LinkPtr LinkPtr;
 typedef OpenRAVE::KinBody::Link::Geometry Geometry;
 typedef OpenRAVE::KinBody::Link::GeometryPtr GeometryPtr;
+typedef OpenRAVE::KinBody::JointPtr JointPtr;
+typedef OpenRAVE::RobotBase::GrabbedInfoPtr GrabbedInfoPtr;
 typedef OpenRAVE::EnvironmentBase::CollisionCallbackFn CollisionCallbackFn;
 
 namespace {
@@ -450,30 +455,88 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
                                       bool attached, bool active_only,
                                       CollisionGroup *group)
 {
-    std::vector<KinBodyConstPtr> bodies;
+    // If this is a robot and we're honoring CO_ActiveDOFs, then only
+    // synchronize the links that are affected by one or more active DOFs.
+    std::vector<LinkConstPtr> body_links;
+    bool const co_activedofs = options_ & OpenRAVE::CO_ActiveDOFs;
 
-    // Generate a set that includes body and grabbed bodies.
-    if (attached) {
-        std::set<KinBodyPtr> bodies_mutable;
-        body->GetAttached(bodies_mutable);
+    if (body->IsRobot() && co_activedofs && active_only) {
+        RobotBaseConstPtr const robot
+                = dynamic_pointer_cast<RobotBase const>(body);
 
-        // Convert from vector<T> to vector<T const>.
-        bodies.reserve(bodies_mutable.size());
-        for (KinBodyPtr const &body : bodies_mutable) {
-            bodies.push_back(body);
+        // Pre-compute the bodies attached to each link.
+        boost::unordered_map<int, std::vector<KinBodyPtr> > grabbed_map;
+        std::vector<GrabbedInfoPtr> grabbed_infos;
+        robot->GetGrabbedInfo(grabbed_infos);
+
+        for (GrabbedInfoPtr const &grabbed_info : grabbed_infos) {
+            std::string const link_name = grabbed_info->_robotlinkname;
+            LinkPtr const link = robot->GetLink(link_name);
+
+            std::string const grabbed_name = grabbed_info->_grabbedname;
+            KinBodyPtr const grabbed_body = GetEnv()->GetKinBody(grabbed_name);
+
+            if (grabbed_body != robot) {
+                grabbed_map[link->GetIndex()].push_back(grabbed_body);
+            }
+        }
+
+        // Joints may cover more than one DOF (e.g. spherical joints). First,
+        // compute the set of joints that covers the active DOFs.
+        std::vector<int> const &dof_indices = robot->GetActiveDOFIndices();
+        boost::unordered_set<int> active_joint_indices; 
+
+        for (int const &dof_index : dof_indices) {
+            JointPtr const joint = robot->GetJointFromDOFIndex(dof_index);
+            active_joint_indices.insert(joint->GetJointIndex());
+        }
+
+        for (LinkPtr const &link : robot->GetLinks()) {
+            int const link_index = link->GetIndex();
+
+            // Check if the link is affected by the active DOFs.
+            bool is_affected = false;
+            for (int const &joint_index : active_joint_indices) {
+                if (robot->DoesAffect(joint_index, link_index)) {
+                    is_affected = true;
+                    break;
+                }
+            }
+
+            if (is_affected) {
+                // Synchronize the link itself.
+                if (link->IsEnabled()) {
+                    Synchronize(collision_data, link, group);
+                }
+
+                // Synchronize bodies attached to this link.
+                if (attached) {
+                    for (KinBodyPtr const &grabbed_body
+                            : grabbed_map[link_index]) {
+                        Synchronize(collision_data, grabbed_body,
+                                    true, false, group);
+                    }
+                }
+            }
         }
     }
-    // If we're ignoring grabbed bodies, then just return body.
+    // Otherwise, synchronize all enabled links and attached bodies.
     else {
-        bodies.reserve(1);
-        bodies.push_back(body);
-    }
-
-
-    for (KinBodyConstPtr const &grabbed_body : bodies) {
-        for (LinkPtr const &link : grabbed_body->GetLinks()) {
+        for (LinkPtr const &link : body->GetLinks()) {
             if (link->IsEnabled()) {
                 Synchronize(collision_data, link, group);
+            }
+        }
+
+        if (attached) {
+            std::set<KinBodyPtr> attached_bodies;
+            body->GetAttached(attached_bodies);
+
+            for (KinBodyPtr const &attached_body : attached_bodies) {
+                if (attached_body != body && attached_body->IsEnabled()) {
+                    Synchronize(collision_data, attached_body,
+                                true, false, group);
+                }
             }
         }
     }
