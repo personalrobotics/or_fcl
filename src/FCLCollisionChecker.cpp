@@ -350,6 +350,18 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
         query.request.num_max_contacts = num_contacts_;
     }
 
+    // Initialize the report.
+    if (report) {
+        report->options = options_;
+        report->plink1.reset(); 
+        report->plink2.reset(); 
+        report->numCols = 0;
+        report->vLinkColliding.clear();
+        report->minDistance = std::numeric_limits<OpenRAVE::dReal>::max();
+        report->numWithinTol = 0;
+        report->contacts.clear();
+    }
+
     manager1_->collide(manager2_.get(), &query,
                        &FCLCollisionChecker::NarrowPhaseCheckCollision);
 
@@ -368,11 +380,9 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
                                       CollisionGroup *group)
 {
     for (LinkPtr const &link : body->GetLinks()) {
-        if (!link->IsEnabled()) {
-            continue;
+        if (link->IsEnabled()) {
+            Synchronize(collision_data, link, group);
         }
-
-        Synchronize(collision_data, link, group);
     }
 }
 
@@ -398,7 +408,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
         // necessary if: (1) there is no existing FCL geometry for this
         // shape or (2) the geometric is dynamic and could be modified at
         // any time.
-        if (result.second || geom->IsModifiable()) {
+        if (result.second) { // || geom->IsModifiable()) {
             CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(geom);
             if (fcl_geom) {
                 fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
