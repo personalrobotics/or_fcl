@@ -467,6 +467,14 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
             query->report->plink2 = GetCollisionLink(*o2);
             query->report->vLinkColliding.push_back(query->report->plink2);
             // TODO: Update numCols.
+
+            if (query->request.enable_contact) {
+                query->report->contacts.resize(num_contacts);
+                for (size_t icontact = 0; icontact < num_contacts; ++icontact) {
+                    fcl::Contact const &contact =  query->result.getContact(icontact);
+                    query->report->contacts[icontact] = ConvertContactToOR(contact);
+                }
+            }
         }
 
         // Call any collision callbacks. Ignore this collision if any of the
@@ -474,16 +482,8 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
         CollisionAction action = OpenRAVE::CA_DefaultAction;
         for (CollisionCallbackFn const &callback : query->callbacks) {
             action = callback(query->report, false);
-            if (action == OpenRAVE::CA_Ignore) { return false; // Keep going.
-            }
-        }
-
-        // Store contact information if CO_Contacts is enabled.
-        if (query->report && query->request.enable_contact) {
-            query->report->contacts.resize(num_contacts);
-            for (size_t icontact = 0; icontact < num_contacts; ++icontact) {
-                fcl::Contact const &contact =  query->result.getContact(icontact);
-                query->report->contacts[icontact] = ConvertContactToOR(contact);
+            if (action == OpenRAVE::CA_Ignore) {
+                return false; // Keep going.
             }
         }
 
