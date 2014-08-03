@@ -88,13 +88,23 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
 
 FCLCollisionChecker::~FCLCollisionChecker()
 {
+    DestroyEnvironment();
 }
 
 bool FCLCollisionChecker::SetCollisionOptions(int collision_options)
 {
-    // TODO: Check for unsupported options.
     options_ = collision_options;
-    return true;
+
+    bool is_supported = true;
+    if (options_ & OpenRAVE::CO_UseTolerance) {
+        RAVELOG_WARN("or_fcl does not support CO_UseTolerance\n");
+        is_supported = false;
+    }
+    if (options_ & OpenRAVE::CO_RayAnyHit) {
+        RAVELOG_WARN("or_fcl does not support CO_RayAnyHit\n");
+        is_supported = false;
+    }
+    return is_supported;
 }
 
 int FCLCollisionChecker::GetCollisionOptions() const
@@ -180,16 +190,13 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
-    // TODO: Implement CO_ActiveDOFs
-    // TODO: Attached bodies.
-
-    // Group 1: Argument.
+    // Group 1: body1 + attached, active only
     manager1_->clear();
-    Synchronize(body1, &group1);
+    Synchronize(body1, true, true, &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
-    // Group 2: Everything else in the environment.
+    // Group 2: everything else
     manager2_->clear();
 
     std::vector<KinBodyPtr> bodies;
@@ -197,7 +204,7 @@ bool FCLCollisionChecker::CheckCollision(
 
     for (KinBodyPtr const &body2 : bodies) {
         if (body2 != body1 && body2->IsEnabled()) {
-            Synchronize(body2, &group2);
+            Synchronize(body2, false, false, &group2);
         }
     }
 
@@ -208,22 +215,23 @@ bool FCLCollisionChecker::CheckCollision(
 } 
 
 bool FCLCollisionChecker::CheckCollision(
-        KinBodyConstPtr pbody1, KinBodyConstPtr pbody2, CollisionReportPtr report)
+        KinBodyConstPtr pbody1, KinBodyConstPtr pbody2,
+        CollisionReportPtr report)
 {
     CollisionGroup group1, group2;
 
     // TODO: Implement CO_ActiveDOFs
     // TODO: Attached bodies.
 
-    // Group 1: body1
+    // Group 1: body1 + attached, active only
     manager1_->clear();
-    Synchronize(pbody1, &group1);
+    Synchronize(pbody1, true, true, &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
-    // Group 2: body2
+    // Group 2: body2 + attached
     manager2_->clear();
-    Synchronize(pbody2, &group2);
+    Synchronize(pbody2, true, false, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -241,23 +249,18 @@ bool FCLCollisionChecker::CheckCollision(
     manager1_->registerObjects(group1);
     manager1_->setup();
 
-    // Group 2: everything else
+    // Group 2: bodies - link's parent
     manager2_->clear();
 
     std::vector<KinBodyPtr> bodies;
     GetEnv()->GetBodies(bodies);
 
+    // TODO: Should we check against plink->GetParent()?
     for (KinBodyPtr const &body2 : bodies) {
-        // TODO: Should we ignore the rest of plink->GetParent()?
-        if (!body2->IsEnabled()) {
+        if (body2 == plink->GetParent() || !body2->IsEnabled()) {
             continue;
         }
-
-        for (LinkPtr const &link2 : body2->GetLinks()) {
-            if (link2 != plink) {
-                Synchronize(link2, &group2);
-            }
-        }
+        Synchronize(body2, false, false, &group2);
     }
 
     manager2_->registerObjects(group2);
@@ -301,7 +304,7 @@ bool FCLCollisionChecker::CheckCollision(
 
     // Group 2: link2.
     manager2_->clear();
-    Synchronize(pbody, &group2);
+    Synchronize(pbody, true, false, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -346,8 +349,6 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
 {
     CollisionGroup group1, group2;
 
-    // TODO: handle attached bodies.
-
     // Group 1: link
     manager1_->clear();
     Synchronize(plink, &group1);
@@ -355,8 +356,9 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     manager1_->setup();
 
     // Group 2: body
+    // TODO: Should we check against attached bodies?
     manager2_->clear();
-    Synchronize(plink->GetParent(), &group2);
+    Synchronize(plink->GetParent(), true, false, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -425,35 +427,50 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
         report->contacts.clear();
     }
 
-#if 1
-    std::vector<fcl::CollisionObject *> objects1; 
-    manager1_->getObjects(objects1);
-
-    for (fcl::CollisionObject * const object1 : objects1) {
-        manager2_->collide(object1, &query,
-                           &FCLCollisionChecker::NarrowPhaseCheckCollision);
-    }
-#else
     manager1_->collide(manager2_.get(), &query,
                        &FCLCollisionChecker::NarrowPhaseCheckCollision);
-#endif
     return query.result.isCollision();
     
 }
 
 void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
+                                      bool attached, bool active_only,
                                       CollisionGroup *group)
 {
-    return Synchronize(GetCollisionData(body), body, group);
+    return Synchronize(GetCollisionData(body), body,
+                       attached, active_only, group);
 }
 
 void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
                                       KinBodyConstPtr const &body,
+                                      bool attached, bool active_only,
                                       CollisionGroup *group)
 {
-    for (LinkPtr const &link : body->GetLinks()) {
-        if (link->IsEnabled()) {
-            Synchronize(collision_data, link, group);
+    std::vector<KinBodyConstPtr> bodies;
+
+    // Generate a set that includes body and grabbed bodies.
+    if (attached) {
+        std::set<KinBodyPtr> bodies_mutable;
+        body->GetAttached(bodies_mutable);
+
+        // Convert from vector<T> to vector<T const>.
+        bodies.reserve(bodies_mutable.size());
+        for (KinBodyPtr const &body : bodies_mutable) {
+            bodies.push_back(body);
+        }
+    }
+    // If we're ignoring grabbed bodies, then just return body.
+    else {
+        bodies.reserve(1);
+        bodies.push_back(body);
+    }
+
+
+    for (KinBodyConstPtr const &grabbed_body : bodies) {
+        for (LinkPtr const &link : grabbed_body->GetLinks()) {
+            if (link->IsEnabled()) {
+                Synchronize(collision_data, link, group);
+            }
         }
     }
 }

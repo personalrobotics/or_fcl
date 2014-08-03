@@ -129,8 +129,11 @@ private:
     bool RunCheck(CollisionReportPtr report);
 
     void Synchronize(KinBodyConstPtr const &body,
+                     bool attached, bool active_only,
                      CollisionGroup *group = NULL);
-    void Synchronize(FCLUserDataPtr const &user_data, KinBodyConstPtr const &body,
+    void Synchronize(FCLUserDataPtr const &user_data,
+                     KinBodyConstPtr const &body,
+                     bool attached, bool active_only,
                      CollisionGroup *group = NULL);
     void Synchronize(LinkConstPtr const &body,
                      CollisionGroup *group = NULL);
