@@ -105,6 +105,7 @@ bool FCLCollisionChecker::CheckCollision(
     CollisionGroup group1, group2;
 
     // TODO: Implement CO_ActiveDOFs
+    // TODO: Attached bodies.
 
     // Group 1: Argument.
     manager1_->clear();
@@ -131,6 +132,65 @@ bool FCLCollisionChecker::CheckCollision(
 } 
 
 bool FCLCollisionChecker::CheckCollision(
+        KinBodyConstPtr pbody1, KinBodyConstPtr pbody2, CollisionReportPtr report)
+{
+    CollisionGroup group1, group2;
+
+    // TODO: Implement CO_ActiveDOFs
+    // TODO: Attached bodies.
+
+    // Group 1: body1
+    manager1_->clear();
+    Synchronize(pbody1, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: body2
+    manager2_->clear();
+    Synchronize(pbody2, &group2);
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
+
+bool FCLCollisionChecker::CheckCollision(
+        LinkConstPtr plink, CollisionReportPtr report)
+{
+    CollisionGroup group1, group2;
+
+    // Group 1: link
+    manager1_->clear();
+    Synchronize(plink, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: everything else
+    manager2_->clear();
+
+    std::vector<KinBodyPtr> bodies;
+    GetEnv()->GetBodies(bodies);
+
+    for (KinBodyPtr const &body2 : bodies) {
+        // TODO: Should we ignore the rest of plink->GetParent()?
+        if (!body2->IsEnabled()) {
+            continue;
+        }
+
+        for (LinkPtr const &link2 : body2->GetLinks()) {
+            if (link2 != plink) {
+                Synchronize(link2, &group2);
+            }
+        }
+    }
+
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
+
+bool FCLCollisionChecker::CheckCollision(
         LinkConstPtr link1, LinkConstPtr link2, CollisionReportPtr report)
 {
     CollisionGroup group1, group2;
@@ -144,6 +204,73 @@ bool FCLCollisionChecker::CheckCollision(
     // Group 2: link2.
     manager2_->clear();
     Synchronize(link2, &group2);
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
+
+bool FCLCollisionChecker::CheckCollision(
+    LinkConstPtr plink, KinBodyConstPtr pbody, CollisionReportPtr report)
+{
+    CollisionGroup group1, group2;
+
+    // TODO: handle attached bodies.
+
+    // Group 1: link.
+    manager1_->clear();
+    Synchronize(plink, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: link2.
+    manager2_->clear();
+    Synchronize(pbody, &group2);
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
+
+bool FCLCollisionChecker::CheckStandaloneSelfCollision(
+        KinBodyConstPtr pbody, CollisionReportPtr report)
+{
+    CollisionGroup group1, group2;
+
+    // TODO: handle CO_Active
+    // TODO: handle attached bodies.
+
+    // Group 1: body
+    manager1_->clear();
+    Synchronize(pbody, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: body
+    manager2_->clear();
+    Synchronize(pbody, &group2);
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
+
+bool FCLCollisionChecker::CheckStandaloneSelfCollision(
+        LinkConstPtr plink, CollisionReportPtr report)
+{
+    CollisionGroup group1, group2;
+
+    // TODO: handle attached bodies.
+
+    // Group 1: link
+    manager1_->clear();
+    Synchronize(plink, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: body
+    manager2_->clear();
+    Synchronize(plink->GetParent(), &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -185,6 +312,8 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
     query.env = GetEnv();
     query.report = report;
     query.env->GetRegisteredCollisionCallbacks(query.callbacks);
+
+    // TODO: Prune adjacent links.
 
     if (options_ & OpenRAVE::CO_Distance) {
         throw OpenRAVE::openrave_exception(
@@ -287,6 +416,12 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
 bool FCLCollisionChecker::NarrowPhaseCheckCollision(
         fcl::CollisionObject *o1, fcl::CollisionObject *o2, void *data)
 {
+    // Ignore collision checks with the same object. This might happen if we
+    // call a CheckCollision with two parameters that overlap.
+    if (o1 == o2) {
+        return false; // Keep going.
+    }
+
     auto const query = static_cast<CollisionQuery *>(data);
 
     size_t const num_contacts = fcl::collide(o1, o2, query->request,

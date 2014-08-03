@@ -60,10 +60,10 @@ public:
     virtual bool CheckCollision(
         KinBodyConstPtr pbody1, KinBodyConstPtr pbody2,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         LinkConstPtr plink, CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         LinkConstPtr plink1, LinkConstPtr plink2,
         CollisionReportPtr report = CollisionReportPtr()
@@ -71,7 +71,7 @@ public:
     virtual bool CheckCollision(
         LinkConstPtr plink, KinBodyConstPtr pbody,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         LinkConstPtr plink,
         std::vector<KinBodyConstPtr> const &vbodyexcluded,
@@ -100,11 +100,11 @@ public:
     virtual bool CheckStandaloneSelfCollision(
         KinBodyConstPtr pbody,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckStandaloneSelfCollision(
         LinkConstPtr plink,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
 
 private:
     typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
