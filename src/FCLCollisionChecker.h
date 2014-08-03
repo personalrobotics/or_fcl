@@ -107,7 +107,7 @@ public:
     virtual bool CheckStandaloneSelfCollision(
         LinkConstPtr plink,
         CollisionReportPtr report = CollisionReportPtr()
-    );
+    ) OR_FCL_DUMMY_IMPLEMENTATION;
 
 private:
     typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
@@ -139,6 +139,9 @@ private:
                      CollisionGroup *group = NULL);
     void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body,
                      CollisionGroup *group= NULL);
+
+    void UnpackLinkPairs(std::set<int> const &packed,
+                         std::vector<std::pair<int, int> > *unpacked) const;
 
     static LinkConstPtr GetCollisionLink(fcl::CollisionObject const &o);
     static bool NarrowPhaseCheckCollision(

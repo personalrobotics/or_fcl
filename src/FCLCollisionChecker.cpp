@@ -316,21 +316,26 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
 {
     CollisionGroup group1, group2;
 
-    // TODO: handle CO_Active
-    // TODO: handle attached bodies.
+    int ao = 0;
+    if (options_ & OpenRAVE::CO_ActiveDOFs) {
+        ao = OpenRAVE::KinBody::AO_ActiveDOFs;
+    } else {
+        ao = OpenRAVE::KinBody::AO_Enabled;
+    }
     
+    // Generate the minimal set of possible link-link collisions. Only
+    // synchronize these pairs into the FCL environment.
+    // TODO: Does this handle grabbed bodies?
+    std::set<int> const &link_pairs_raw = pbody->GetNonAdjacentLinks(ao);
+    std::vector<std::pair<int, int> > link_pairs;
+    UnpackLinkPairs(link_pairs_raw, &link_pairs);
+
     std::vector<LinkPtr> const &links = pbody->GetLinks();
-    std::set<int> const &link_pairs = pbody->GetNonAdjacentLinks(0);
-
-    for (int const &link_pair : link_pairs) {
-        int const index1 = ((link_pair >>  0) & 0xFFFF);
-        LinkPtr const link1 = links.at(index1);
+    for (std::pair<int, int> const &link_pair : link_pairs) {
+        LinkPtr const link1 = links.at(link_pair.first);
         Synchronize(link1, &group1);
-        Synchronize(link1, &group2);
 
-        int const index2 = ((link_pair >> 16) & 0xFFFF);
-        LinkPtr const link2 = links.at(index1);
-        Synchronize(link2, &group1);
+        LinkPtr const link2 = links.at(link_pair.second);
         Synchronize(link2, &group2);
     }
 
@@ -339,27 +344,6 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     manager1_->registerObjects(group1);
     manager2_->registerObjects(group2);
     manager1_->setup();
-    manager2_->setup();
-
-    return RunCheck(report);
-}
-
-bool FCLCollisionChecker::CheckStandaloneSelfCollision(
-        LinkConstPtr plink, CollisionReportPtr report)
-{
-    CollisionGroup group1, group2;
-
-    // Group 1: link
-    manager1_->clear();
-    Synchronize(plink, &group1);
-    manager1_->registerObjects(group1);
-    manager1_->setup();
-
-    // Group 2: body
-    // TODO: Should we check against attached bodies?
-    manager2_->clear();
-    Synchronize(plink->GetParent(), true, false, &group2);
-    manager2_->registerObjects(group2);
     manager2_->setup();
 
     return RunCheck(report);
@@ -431,6 +415,26 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
                        &FCLCollisionChecker::NarrowPhaseCheckCollision);
     return query.result.isCollision();
     
+}
+
+
+void FCLCollisionChecker::UnpackLinkPairs(
+        std::set<int> const &packed,
+        std::vector<std::pair<int, int> > *unpacked) const
+{
+    BOOST_ASSERT(unpacked);
+
+    unpacked->reserve(packed.size());
+
+    for (int const &link_pair : packed) {
+        int const index1 = ((link_pair >>  0) & 0xFFFF);
+        int const index2 = ((link_pair >> 16) & 0xFFFF);
+        if (index1 < index2) {
+            unpacked->push_back(make_pair(index1, index2));
+        } else {
+            unpacked->push_back(make_pair(index2, index1));
+        }
+    }
 }
 
 void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
@@ -547,6 +551,9 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
     if (o1 == o2) {
         return false; // Keep going.
     }
+
+    // TODO: Prune GetAdjacentLinks
+    // TODO: Prune GetIgnoredLinksOfGrabbed.
 
     auto const query = static_cast<CollisionQuery *>(data);
     size_t const num_contacts = fcl::collide(o1, o2, query->request,
