@@ -4,6 +4,7 @@
 #include <boost/unordered_map.hpp>
 #include <fcl/collision.h>
 #include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
+#include <fcl/broadphase/broadphase_bruteforce.h>
 #include <fcl/shape/geometric_shapes.h>
 #include "FCLCollisionChecker.h"
 
@@ -73,6 +74,18 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
 
 FCLCollisionChecker::~FCLCollisionChecker()
 {
+}
+
+bool FCLCollisionChecker::SetCollisionOptions(int collision_options)
+{
+    // TODO: Check for unsupported options.
+    options_ = collision_options;
+    return true;
+}
+
+int FCLCollisionChecker::GetCollisionOptions() const
+{
+    return options_;
 }
 
 bool FCLCollisionChecker::InitEnvironment()
@@ -239,17 +252,27 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
 
     // TODO: handle CO_Active
     // TODO: handle attached bodies.
+    
+    std::vector<LinkPtr> const &links = pbody->GetLinks();
+    std::set<int> const &link_pairs = pbody->GetNonAdjacentLinks(0);
 
-    // Group 1: body
+    for (int const &link_pair : link_pairs) {
+        int const index1 = ((link_pair >>  0) & 0xFFFF);
+        LinkPtr const link1 = links.at(index1);
+        Synchronize(link1, &group1);
+        Synchronize(link1, &group2);
+
+        int const index2 = ((link_pair >> 16) & 0xFFFF);
+        LinkPtr const link2 = links.at(index1);
+        Synchronize(link2, &group1);
+        Synchronize(link2, &group2);
+    }
+
     manager1_->clear();
-    Synchronize(pbody, &group1);
-    manager1_->registerObjects(group1);
-    manager1_->setup();
-
-    // Group 2: body
     manager2_->clear();
-    Synchronize(pbody, &group2);
+    manager1_->registerObjects(group1);
     manager2_->registerObjects(group2);
+    manager1_->setup();
     manager2_->setup();
 
     return RunCheck(report);
@@ -377,8 +400,8 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
         // any time.
         if (result.second || geom->IsModifiable()) {
             CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(geom);
-            fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
-            if (fcl_object) {
+            if (fcl_geom) {
+                fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
                 fcl_object->setUserData(const_cast<Link *>(link.get()));
             }
         }
