@@ -47,6 +47,7 @@ public:
     virtual bool SetCollisionOptions(int collision_options);
     virtual int GetCollisionOptions() const;
     virtual void SetTolerance(OpenRAVE::dReal tolerance) OR_FCL_DUMMY_IMPLEMENTATION;
+    void SetBroadphaseAlgorithm(std::string const &algorithm);
 
     virtual bool InitEnvironment();
     virtual void DestroyEnvironment();

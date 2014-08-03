@@ -3,10 +3,17 @@
 #include <boost/make_shared.hpp>
 #include <boost/unordered_map.hpp>
 #include <fcl/collision.h>
-#include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
-#include <fcl/broadphase/broadphase_bruteforce.h>
 #include <fcl/shape/geometric_shapes.h>
 #include "FCLCollisionChecker.h"
+
+// Broad-phase collision checkers.
+#include <fcl/broadphase/broadphase_SaP.h>
+#include <fcl/broadphase/broadphase_SSaP.h>
+#include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
+#include <fcl/broadphase/broadphase_dynamic_AABB_tree_array.h>
+#include <fcl/broadphase/broadphase_bruteforce.h>
+#include <fcl/broadphase/broadphase_interval_tree.h>
+#include <fcl/broadphase/broadphase_spatialhash.h>
 
 using std::make_pair;
 using boost::adaptors::map_values;
@@ -67,9 +74,8 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
     , user_data_(str(format("or_fcl[%p]") % this))
     , num_contacts_(100)
     , options_(0)
-    , manager1_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
-    , manager2_(make_shared<fcl::DynamicAABBTreeCollisionManager>())
 {
+    SetBroadphaseAlgorithm("DynamicAABBTree");
 }
 
 FCLCollisionChecker::~FCLCollisionChecker()
@@ -86,6 +92,35 @@ bool FCLCollisionChecker::SetCollisionOptions(int collision_options)
 int FCLCollisionChecker::GetCollisionOptions() const
 {
     return options_;
+}
+
+void FCLCollisionChecker::SetBroadphaseAlgorithm(
+        std::string const &algorithm)
+{
+    if (algorithm == "Naive") {
+        manager1_ = make_shared<fcl::NaiveCollisionManager>();
+        manager2_ = make_shared<fcl::NaiveCollisionManager>();
+    } else if (algorithm == "SaP") {
+        manager1_ = make_shared<fcl::SaPCollisionManager>();
+        manager2_ = make_shared<fcl::SaPCollisionManager>();
+    } else if (algorithm == "SSaP") {
+        manager1_ = make_shared<fcl::SSaPCollisionManager>();
+        manager2_ = make_shared<fcl::SSaPCollisionManager>();
+    } else if (algorithm == "IntervalTree") {
+        manager1_ = make_shared<fcl::IntervalTreeCollisionManager>();
+        manager2_ = make_shared<fcl::IntervalTreeCollisionManager>();
+    } else if (algorithm == "DynamicAABBTree")  {
+        manager1_ = make_shared<fcl::DynamicAABBTreeCollisionManager>();
+        manager2_ = make_shared<fcl::DynamicAABBTreeCollisionManager>();
+    } else if (algorithm == "DynamicAABBTree_Array") {
+        manager1_ = make_shared<fcl::DynamicAABBTreeCollisionManager_Array>();
+        manager2_ = make_shared<fcl::DynamicAABBTreeCollisionManager_Array>();
+    } else {
+        throw OpenRAVE::openrave_exception(
+            str(format("Unknown broad-phase algorithm '%s'.") % algorithm),
+            OpenRAVE::ORE_InvalidArguments
+        );
+    }
 }
 
 bool FCLCollisionChecker::InitEnvironment()
