@@ -124,20 +124,21 @@ private:
     MeshFactory mesh_factory_;
     BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
-    FCLUserDataPtr GetCollisionData(KinBodyConstPtr const &body) const;
+    FCLUserDataPtr GetCollisionData(OpenRAVE::KinBody const *body) const;
 
     bool RunCheck(CollisionReportPtr report);
 
-    void Synchronize(KinBodyConstPtr const &body,
+    void Synchronize(OpenRAVE::KinBody const *body,
                      bool attached, bool active_only,
                      CollisionGroup *group = NULL);
     void Synchronize(FCLUserDataPtr const &user_data,
-                     KinBodyConstPtr const &body,
+                     OpenRAVE::KinBody const *body,
                      bool attached, bool active_only,
                      CollisionGroup *group = NULL);
-    void Synchronize(LinkConstPtr const &body,
+    void Synchronize(OpenRAVE::KinBody::Link const *link,
                      CollisionGroup *group = NULL);
-    void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body,
+    void Synchronize(FCLUserDataPtr const &user_data,
+                     OpenRAVE::KinBody::Link const *link,
                      CollisionGroup *group= NULL);
 
     void UnpackLinkPairs(

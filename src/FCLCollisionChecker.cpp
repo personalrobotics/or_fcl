@@ -28,6 +28,7 @@ using OpenRAVE::CollisionAction;
 using OpenRAVE::CollisionReport;
 using OpenRAVE::CollisionReportPtr;
 using OpenRAVE::EnvironmentBasePtr;
+using OpenRAVE::KinBody;
 using OpenRAVE::KinBodyPtr;
 using OpenRAVE::TriMesh;
 using OpenRAVE::RobotBase;
@@ -201,7 +202,7 @@ bool FCLCollisionChecker::CheckCollision(
 
     // Group 1: body1 + attached, active only
     manager1_->clear();
-    Synchronize(body1, true, true, &group1);
+    Synchronize(body1.get(), true, true, &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
@@ -213,7 +214,7 @@ bool FCLCollisionChecker::CheckCollision(
 
     for (KinBodyPtr const &body2 : bodies) {
         if (body2 != body1 && body2->IsEnabled()) {
-            Synchronize(body2, false, false, &group2);
+            Synchronize(body2.get(), false, false, &group2);
         }
     }
 
@@ -234,13 +235,13 @@ bool FCLCollisionChecker::CheckCollision(
 
     // Group 1: body1 + attached, active only
     manager1_->clear();
-    Synchronize(pbody1, true, true, &group1);
+    Synchronize(pbody1.get(), true, true, &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
     // Group 2: body2 + attached
     manager2_->clear();
-    Synchronize(pbody2, true, false, &group2);
+    Synchronize(pbody2.get(), true, false, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -254,7 +255,7 @@ bool FCLCollisionChecker::CheckCollision(
 
     // Group 1: link
     manager1_->clear();
-    Synchronize(plink, &group1);
+    Synchronize(plink.get(), &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
@@ -269,7 +270,7 @@ bool FCLCollisionChecker::CheckCollision(
         if (body2 == plink->GetParent() || !body2->IsEnabled()) {
             continue;
         }
-        Synchronize(body2, false, false, &group2);
+        Synchronize(body2.get(), false, false, &group2);
     }
 
     manager2_->registerObjects(group2);
@@ -285,13 +286,13 @@ bool FCLCollisionChecker::CheckCollision(
 
     // Group 1: link1.
     manager1_->clear();
-    Synchronize(link1, &group1);
+    Synchronize(link1.get(), &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
     // Group 2: link2.
     manager2_->clear();
-    Synchronize(link2, &group2);
+    Synchronize(link2.get(), &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -307,13 +308,13 @@ bool FCLCollisionChecker::CheckCollision(
 
     // Group 1: link.
     manager1_->clear();
-    Synchronize(plink, &group1);
+    Synchronize(plink.get(), &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
     // Group 2: link2.
     manager2_->clear();
-    Synchronize(pbody, true, false, &group2);
+    Synchronize(pbody.get(), true, false, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -344,15 +345,13 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     for (std::pair<Link const *, Link const *> const &link_pair : nonadjacent_pairs) {
         Link const *link1 = link_pair.first;
         if (link1->IsEnabled() && !group1_links.count(link1)) {
-            // TODO: This can only take a shared_ptr.
-            //Synchronize(link1, &group1);
+            Synchronize(link1, &group1);
             group1_links.insert(link1);
         }
 
         Link const *link2 = link_pair.second;
         if (link2->IsEnabled() && !group2_links.count(link2)) {
-            // TODO: This can only take a shared_ptr.
-            //Synchronize(link2, &group2);
+            Synchronize(link2, &group2);
             group2_links.insert(link2);
         }
     }
@@ -380,8 +379,8 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
             // Body is grabbed by an active link.
             if (group1_links.count(link.get()) || group2_links.count(link.get())) {
                 if (grabbed_body != robot && grabbed_body->IsEnabled()) {
-                    Synchronize(grabbed_body, true, false, &group1);
-                    Synchronize(grabbed_body, true, false, &group2);
+                    Synchronize(grabbed_body.get(), true, false, &group1);
+                    Synchronize(grabbed_body.get(), true, false, &group2);
                 }
             }
 
@@ -433,7 +432,7 @@ auto FCLCollisionChecker::GetCollisionLink(
 }
 
 FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
-        KinBodyConstPtr const &body) const
+        KinBody const *body) const
 {
     UserDataPtr const user_data = body->GetUserData(user_data_);
     return dynamic_pointer_cast<FCLUserData>(user_data);
@@ -525,7 +524,7 @@ std::pair<Link const *, Link const *> FCLCollisionChecker::MakeLinkPair(
     }
 }
 
-void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
+void FCLCollisionChecker::Synchronize(KinBody const *body,
                                       bool attached, bool active_only,
                                       CollisionGroup *group)
 {
@@ -534,7 +533,7 @@ void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
 }
 
 void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
-                                      KinBodyConstPtr const &body,
+                                      KinBody const *body,
                                       bool attached, bool active_only,
                                       CollisionGroup *group)
 {
@@ -544,8 +543,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
     bool const co_activedofs = options_ & OpenRAVE::CO_ActiveDOFs;
 
     if (body->IsRobot() && co_activedofs && active_only) {
-        RobotBaseConstPtr const robot
-                = dynamic_pointer_cast<RobotBase const>(body);
+        auto const robot = dynamic_cast<RobotBase const *>(body);
 
         // Pre-compute the bodies attached to each link.
         boost::unordered_map<int, std::vector<KinBodyPtr> > grabbed_map;
@@ -559,7 +557,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             std::string const grabbed_name = grabbed_info->_grabbedname;
             KinBodyPtr const grabbed_body = GetEnv()->GetKinBody(grabbed_name);
 
-            if (grabbed_body != robot) {
+            if (grabbed_body.get() != robot) {
                 grabbed_map[link->GetIndex()].push_back(grabbed_body);
             }
         }
@@ -589,14 +587,14 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             if (is_affected) {
                 // Synchronize the link itself.
                 if (link->IsEnabled()) {
-                    Synchronize(collision_data, link, group);
+                    Synchronize(collision_data, link.get(), group);
                 }
 
                 // Synchronize bodies attached to this link.
                 if (attached) {
                     for (KinBodyPtr const &grabbed_body
                             : grabbed_map[link_index]) {
-                        Synchronize(collision_data, grabbed_body,
+                        Synchronize(collision_data, grabbed_body.get(),
                                     true, false, group);
                     }
                 }
@@ -607,7 +605,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
     else {
         for (LinkPtr const &link : body->GetLinks()) {
             if (link->IsEnabled()) {
-                Synchronize(collision_data, link, group);
+                Synchronize(collision_data, link.get(), group);
             }
         }
 
@@ -616,8 +614,8 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             body->GetAttached(attached_bodies);
 
             for (KinBodyPtr const &attached_body : attached_bodies) {
-                if (attached_body != body && attached_body->IsEnabled()) {
-                    Synchronize(collision_data, attached_body,
+                if (attached_body.get() != body && attached_body->IsEnabled()) {
+                    Synchronize(collision_data, attached_body.get(),
                                 true, false, group);
                 }
             }
@@ -625,14 +623,14 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
     }
 }
 
-void FCLCollisionChecker::Synchronize(LinkConstPtr const &link,
+void FCLCollisionChecker::Synchronize(Link const *link,
                                       CollisionGroup *group)
 {
-    return Synchronize(GetCollisionData(link->GetParent()), link, group);
+    return Synchronize(GetCollisionData(link->GetParent().get()), link, group);
 }
 
 void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
-                                      LinkConstPtr const &link,
+                                      Link const *link,
                                       CollisionGroup *group)
 {
     OpenRAVE::Transform const link_pose = link->GetTransform();
@@ -653,7 +651,7 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
             );
             if (fcl_geom) {
                 fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
-                fcl_object->setUserData(const_cast<Link *>(link.get()));
+                fcl_object->setUserData(const_cast<Link *>(link));
             }
         }
 
