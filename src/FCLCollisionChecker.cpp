@@ -380,8 +380,10 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
             // Body is grabbed by an active link.
             if (group1_links.count(link.get()) || group2_links.count(link.get())) {
                 if (grabbed_body != robot && grabbed_body->IsEnabled()) {
-                    Synchronize(grabbed_body.get(), true, false, &group1);
-                    Synchronize(grabbed_body.get(), true, false, &group2);
+                    CollisionGroup temp_group;
+                    Synchronize(grabbed_body.get(), true, false, &temp_group);
+                    group1.insert(group1.end(), temp_group.begin(), temp_group.end());
+                    group2.insert(group2.end(), temp_group.begin(), temp_group.end());
                 }
             }
 
@@ -401,10 +403,11 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     }
 
     manager1_->clear();
-    manager2_->clear();
     manager1_->registerObjects(group1);
-    manager2_->registerObjects(group2);
     manager1_->setup();
+
+    manager2_->clear();
+    manager2_->registerObjects(group2);
     manager2_->setup();
 
     return RunCheck(report, disabled_pairs);
@@ -487,7 +490,7 @@ void FCLCollisionChecker::UnpackLinkPairs(
 {
     BOOST_ASSERT(unpacked);
 
-    unpacked->reserve(packed.size());
+    unpacked->reserve(unpacked->size() + packed.size());
 
     for (int const &link_pair : packed) {
         int const index1 = ((link_pair >>  0) & 0xFFFF);
@@ -511,6 +514,8 @@ void FCLCollisionChecker::UnpackLinkPairs(
     UnpackLinkPairs(packed, &index_pairs);
 
     std::vector<LinkPtr> const &links = body->GetLinks();
+    unpacked->reserve(unpacked->size() + packed.size());
+
     for (std::pair<int, int> const &index_pair : index_pairs) {
         LinkPtr const &link1 = links[index_pair.first];
         LinkPtr const &link2 = links[index_pair.second];
@@ -707,7 +712,7 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
 
     // Ignore collision checks with the same object. This might happen if we
     // call a CheckCollision with two parameters that overlap.
-    if (o1 == o2) {
+    if (plink1 == plink2) {
         return false; // Keep going.
     }
     // Ignore disabled pairs of links. MakeLinkPair enforces the invariant that
