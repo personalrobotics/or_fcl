@@ -140,8 +140,17 @@ private:
     void Synchronize(FCLUserDataPtr const &user_data, LinkConstPtr const &body,
                      CollisionGroup *group= NULL);
 
-    void UnpackLinkPairs(std::set<int> const &packed,
-                         std::vector<std::pair<int, int> > *unpacked) const;
+    void UnpackLinkPairs(
+        std::set<int> const &packed,
+        std::vector<std::pair<int, int> > *unpacked) const;
+    void UnpackLinkPairs(
+        OpenRAVE::KinBodyConstPtr const &body, std::set<int> const &packed,
+        std::vector<std::pair<OpenRAVE::KinBody::Link const *,
+                              OpenRAVE::KinBody::Link const *> > *unpacked) const;
+    std::pair<OpenRAVE::KinBody::Link const *,
+              OpenRAVE::KinBody::Link const *> MakeLinkPair(
+        OpenRAVE::KinBody::Link const *link1,
+        OpenRAVE::KinBody::Link const *link2) const;
 
     static LinkConstPtr GetCollisionLink(fcl::CollisionObject const &o);
     static bool NarrowPhaseCheckCollision(

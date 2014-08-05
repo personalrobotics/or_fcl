@@ -22,6 +22,7 @@ using boost::dynamic_pointer_cast;
 using boost::format;
 using boost::make_shared;
 using boost::unordered_map;
+using boost::unordered_set;
 using boost::str;
 using OpenRAVE::CollisionAction;
 using OpenRAVE::CollisionReport;
@@ -60,9 +61,12 @@ struct CollisionQuery {
     fcl::CollisionRequest request;
     fcl::CollisionResult result;
     CollisionReportPtr report;
+    unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
     std::list<CollisionCallbackFn> callbacks;
+
     bool is_collision;
     int num_narrow;
+
 };
 
 }
@@ -319,29 +323,81 @@ bool FCLCollisionChecker::CheckCollision(
 bool FCLCollisionChecker::CheckStandaloneSelfCollision(
         KinBodyConstPtr pbody, CollisionReportPtr report)
 {
+    unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
     CollisionGroup group1, group2;
-
+    
+    // Generate the minimal set of possible link-link collisions. This
+    // implicitly handles the CO_ActiveDOFs option by delegating that
+    // responsibility to GetNonAdjacentLinks. We intentionally do not pass
+    // AO_Enabled so the output can be used to determine which grabbed
+    // objects should be considered.
     int ao = 0;
     if (options_ & OpenRAVE::CO_ActiveDOFs) {
-        ao = OpenRAVE::KinBody::AO_ActiveDOFs;
-    } else {
-        ao = OpenRAVE::KinBody::AO_Enabled;
+        ao |= OpenRAVE::KinBody::AO_ActiveDOFs;
     }
-    
-    // Generate the minimal set of possible link-link collisions. Only
-    // synchronize these pairs into the FCL environment.
-    // TODO: Does this handle grabbed bodies?
-    std::set<int> const &link_pairs_raw = pbody->GetNonAdjacentLinks(ao);
-    std::vector<std::pair<int, int> > link_pairs;
-    UnpackLinkPairs(link_pairs_raw, &link_pairs);
 
-    std::vector<LinkPtr> const &links = pbody->GetLinks();
-    for (std::pair<int, int> const &link_pair : link_pairs) {
-        LinkPtr const link1 = links.at(link_pair.first);
-        Synchronize(link1, &group1);
+    std::set<int> const &nonadjacent_pairs_raw = pbody->GetNonAdjacentLinks(ao);
+    std::vector<std::pair<Link const *, Link const *> > nonadjacent_pairs;
+    UnpackLinkPairs(pbody, nonadjacent_pairs_raw, &nonadjacent_pairs);
 
-        LinkPtr const link2 = links.at(link_pair.second);
-        Synchronize(link2, &group2);
+    unordered_set<Link const *> group1_links, group2_links;
+    for (std::pair<Link const *, Link const *> const &link_pair : nonadjacent_pairs) {
+        Link const *link1 = link_pair.first;
+        if (link1->IsEnabled() && !group1_links.count(link1)) {
+            // TODO: This can only take a shared_ptr.
+            //Synchronize(link1, &group1);
+            group1_links.insert(link1);
+        }
+
+        Link const *link2 = link_pair.second;
+        if (link2->IsEnabled() && !group2_links.count(link2)) {
+            // TODO: This can only take a shared_ptr.
+            //Synchronize(link2, &group2);
+            group2_links.insert(link2);
+        }
+    }
+
+    // Disable collisions between adjacent links.
+    std::set<int> const &adjacent_pairs_raw = pbody->GetAdjacentLinks();
+    std::vector<std::pair<Link const *, Link const *> > adjacent_pairs;
+    UnpackLinkPairs(pbody, adjacent_pairs_raw, &adjacent_pairs);
+    disabled_pairs.insert(disabled_pairs.begin(), disabled_pairs.end());
+
+    // Include grabbed objects that are attached to one or more of the links
+    // that we're considered.
+    if (pbody->IsRobot()) {
+        auto const robot = dynamic_pointer_cast<RobotBase const>(pbody);
+        std::vector<GrabbedInfoPtr> grabbed_infos;
+        robot->GetGrabbedInfo(grabbed_infos);
+
+        for (GrabbedInfoPtr const &grabbed_info : grabbed_infos) {
+            std::string const &link_name = grabbed_info->_robotlinkname;
+            std::string const &grabbed_name = grabbed_info->_grabbedname;
+            KinBodyPtr const grabbed_body = GetEnv()->GetKinBody(grabbed_name);
+            LinkPtr const link = robot->GetLink(link_name);
+            int const link_index = link->GetIndex();
+
+            // Body is grabbed by an active link.
+            if (group1_links.count(link.get()) || group2_links.count(link.get())) {
+                if (grabbed_body != robot && grabbed_body->IsEnabled()) {
+                    Synchronize(grabbed_body, true, false, &group1);
+                    Synchronize(grabbed_body, true, false, &group2);
+                }
+            }
+
+            // Disable collisions between the grabbed body and select robot links.
+            std::list<LinkConstPtr> ignored_robot_links;
+            robot->GetIgnoredLinksOfGrabbed(grabbed_body, ignored_robot_links);
+            std::vector<LinkPtr> const &grabbed_links = grabbed_body->GetLinks();
+
+            for (LinkConstPtr const &grabbed_link : grabbed_links) {
+                for (LinkConstPtr const &robot_link : ignored_robot_links) {
+                    disabled_pairs.insert(
+                        MakeLinkPair(grabbed_link.get(), robot_link.get())
+                    );
+                }
+            }
+        }
     }
 
     manager1_->clear();
@@ -422,7 +478,6 @@ bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
     
 }
 
-
 void FCLCollisionChecker::UnpackLinkPairs(
         std::set<int> const &packed,
         std::vector<std::pair<int, int> > *unpacked) const
@@ -439,6 +494,34 @@ void FCLCollisionChecker::UnpackLinkPairs(
         } else {
             unpacked->push_back(make_pair(index2, index1));
         }
+    }
+}
+
+void FCLCollisionChecker::UnpackLinkPairs(
+        KinBodyConstPtr const &body, std::set<int> const &packed,
+        std::vector<std::pair<Link const *, Link const *> > *unpacked) const
+{
+    BOOST_ASSERT(body);
+    BOOST_ASSERT(unpacked);
+
+    std::vector<std::pair<int, int> > index_pairs;
+    UnpackLinkPairs(packed, &index_pairs);
+
+    std::vector<LinkPtr> const &links = body->GetLinks();
+    for (std::pair<int, int> const &index_pair : index_pairs) {
+        LinkPtr const &link1 = links[index_pair.first];
+        LinkPtr const &link2 = links[index_pair.second];
+        unpacked->push_back(MakeLinkPair(link1.get(), link2.get()));
+    }
+}
+
+std::pair<Link const *, Link const *> FCLCollisionChecker::MakeLinkPair(
+        Link const *link1, Link const *link2) const
+{
+    if (link1 < link2) {
+        return std::make_pair(link1, link2);
+    } else {
+        return std::make_pair(link2, link1);
     }
 }
 
