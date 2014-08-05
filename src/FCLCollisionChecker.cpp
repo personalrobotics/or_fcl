@@ -62,8 +62,8 @@ struct CollisionQuery {
     fcl::CollisionRequest request;
     fcl::CollisionResult result;
     CollisionReportPtr report;
-    unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
     std::list<CollisionCallbackFn> callbacks;
+    unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
 
     bool is_collision;
     int num_narrow;
@@ -360,10 +360,11 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     std::set<int> const &adjacent_pairs_raw = pbody->GetAdjacentLinks();
     std::vector<std::pair<Link const *, Link const *> > adjacent_pairs;
     UnpackLinkPairs(pbody, adjacent_pairs_raw, &adjacent_pairs);
-    disabled_pairs.insert(disabled_pairs.begin(), disabled_pairs.end());
+    disabled_pairs.insert(adjacent_pairs.begin(),
+                          adjacent_pairs.end());
 
-    // Include grabbed objects that are attached to one or more of the links
-    // that we're considered.
+    // Include grabbed objects that are attached to one or more of
+    // the links that we're considered.
     if (pbody->IsRobot()) {
         auto const robot = dynamic_pointer_cast<RobotBase const>(pbody);
         std::vector<GrabbedInfoPtr> grabbed_infos;
@@ -406,7 +407,7 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     manager1_->setup();
     manager2_->setup();
 
-    return RunCheck(report);
+    return RunCheck(report, disabled_pairs);
 }
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
@@ -438,14 +439,17 @@ FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
     return dynamic_pointer_cast<FCLUserData>(user_data);
 }
 
-bool FCLCollisionChecker::RunCheck(CollisionReportPtr report)
+bool FCLCollisionChecker::RunCheck(
+        CollisionReportPtr report,
+        boost::unordered_set<LinkPair> const &disabled_pairs)
 {
     CollisionQuery query;
     query.env = GetEnv();
     query.report = report;
     query.env->GetRegisteredCollisionCallbacks(query.callbacks);
 
-    // TODO: Prune adjacent links.
+    // TODO: We don't need to copy here.
+    query.disabled_pairs = disabled_pairs;
 
     if (options_ & OpenRAVE::CO_Distance) {
         throw OpenRAVE::openrave_exception(
@@ -515,7 +519,7 @@ void FCLCollisionChecker::UnpackLinkPairs(
 }
 
 std::pair<Link const *, Link const *> FCLCollisionChecker::MakeLinkPair(
-        Link const *link1, Link const *link2) const
+        Link const *link1, Link const *link2)
 {
     if (link1 < link2) {
         return std::make_pair(link1, link2);
@@ -697,22 +701,24 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
 bool FCLCollisionChecker::NarrowPhaseCheckCollision(
         fcl::CollisionObject *o1, fcl::CollisionObject *o2, void *data)
 {
+    auto const query = static_cast<CollisionQuery *>(data);
+    LinkConstPtr const plink1 = GetCollisionLink(*o1);
+    LinkConstPtr const plink2 = GetCollisionLink(*o2);
+
     // Ignore collision checks with the same object. This might happen if we
     // call a CheckCollision with two parameters that overlap.
     if (o1 == o2) {
         return false; // Keep going.
     }
+    // Ignore disabled pairs of links. MakeLinkPair enforces the invariant that
+    // plink1 <= plink2, so we don't need to check (plink2, plink1).
+    else if (query->disabled_pairs.count(MakeLinkPair(plink1.get(), plink2.get()))) {
+        return false; // Keep going.
+    }
 
-    // TODO: Prune GetAdjacentLinks
-    // TODO: Prune GetIgnoredLinksOfGrabbed.
-
-    auto const query = static_cast<CollisionQuery *>(data);
     size_t const num_contacts = fcl::collide(o1, o2, query->request,
                                                      query->result);
     query->num_narrow++;
-
-    LinkConstPtr const plink1 = GetCollisionLink(*o1);
-    LinkConstPtr const plink2 = GetCollisionLink(*o2);
 
     if (num_contacts > 0) {
         // If an output report was specified, fill it in.

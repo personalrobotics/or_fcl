@@ -1,6 +1,7 @@
 #ifndef FCLCOLLISIONCHECKER_H_
 #define FCLCOLLISIONCHECKER_H_
 #include <boost/unordered_map.hpp>
+#include <boost/unordered_set.hpp>
 #include <openrave/openrave.h>
 #include <fcl/collision_data.h>
 #include <fcl/BVH/BVH_model.h>
@@ -117,6 +118,8 @@ private:
         CollisionGeometryPtr (std::vector<fcl::Vec3f> const &points,
                               std::vector<fcl::Triangle> const &triangles)
         > MeshFactory;
+    typedef std::pair<OpenRAVE::KinBody::Link const *,
+                      OpenRAVE::KinBody::Link const *> LinkPair;
 
     std::string user_data_;
     int num_contacts_;
@@ -126,7 +129,11 @@ private:
 
     FCLUserDataPtr GetCollisionData(OpenRAVE::KinBody const *body) const;
 
-    bool RunCheck(CollisionReportPtr report);
+    bool RunCheck(
+        CollisionReportPtr report,
+        boost::unordered_set<LinkPair> const &disabled_pairs
+            = boost::unordered_set<LinkPair>()
+    );
 
     void Synchronize(OpenRAVE::KinBody const *body,
                      bool attached, bool active_only,
@@ -139,7 +146,7 @@ private:
                      CollisionGroup *group = NULL);
     void Synchronize(FCLUserDataPtr const &user_data,
                      OpenRAVE::KinBody::Link const *link,
-                     CollisionGroup *group= NULL);
+                     CollisionGroup *group = NULL);
 
     void UnpackLinkPairs(
         std::set<int> const &packed,
@@ -148,10 +155,11 @@ private:
         OpenRAVE::KinBodyConstPtr const &body, std::set<int> const &packed,
         std::vector<std::pair<OpenRAVE::KinBody::Link const *,
                               OpenRAVE::KinBody::Link const *> > *unpacked) const;
-    std::pair<OpenRAVE::KinBody::Link const *,
+
+    static std::pair<OpenRAVE::KinBody::Link const *,
               OpenRAVE::KinBody::Link const *> MakeLinkPair(
         OpenRAVE::KinBody::Link const *link1,
-        OpenRAVE::KinBody::Link const *link2) const;
+        OpenRAVE::KinBody::Link const *link2);
 
     static LinkConstPtr GetCollisionLink(fcl::CollisionObject const &o);
     static bool NarrowPhaseCheckCollision(
