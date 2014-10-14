@@ -1,4 +1,5 @@
 #include <boost/range/adaptor/map.hpp>
+#include <boost/foreach.hpp>
 #include <boost/format.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/unordered_map.hpp>
@@ -341,21 +342,23 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     std::vector<std::pair<Link const *, Link const *> > nonadjacent_pairs;
     UnpackLinkPairs(pbody, nonadjacent_pairs_raw, &nonadjacent_pairs);
 
+
     unordered_set<Link const *> group1_links, group2_links;
     for (std::pair<Link const *, Link const *> const &link_pair : nonadjacent_pairs) {
         Link const *link1 = link_pair.first;
-        if (link1->IsEnabled() && !group1_links.count(link1)) {
+        if (link1->IsEnabled() && !group1_links.count(link1)){
             Synchronize(link1, &group1);
             group1_links.insert(link1);
+//            std::cout << "G1: " << link1->GetName() << std::endl;
         }
 
         Link const *link2 = link_pair.second;
-        if (link2->IsEnabled() && !group2_links.count(link2)) {
+        if (link2->IsEnabled() && !group2_links.count(link2)){
             Synchronize(link2, &group2);
             group2_links.insert(link2);
         }
     }
-
+/**
     // Disable collisions between adjacent links.
     std::set<int> const &adjacent_pairs_raw = pbody->GetAdjacentLinks();
     std::vector<std::pair<Link const *, Link const *> > adjacent_pairs;
@@ -401,7 +404,7 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
             }
         }
     }
-
+*/
     manager1_->clear();
     manager1_->registerObjects(group1);
     manager1_->setup();
@@ -410,7 +413,23 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     manager2_->registerObjects(group2);
     manager2_->setup();
 
-    return RunCheck(report, disabled_pairs);
+    // Bypass broad phase check
+    CollisionQuery query;
+    query.env = GetEnv();
+    query.report = report;
+    query.env->GetRegisteredCollisionCallbacks(query.callbacks);
+    query.disabled_pairs = disabled_pairs;
+    BOOST_FOREACH(fcl::CollisionObject* o1, group1){
+        BOOST_FOREACH(fcl::CollisionObject* o2, group2){
+            bool should_continue = NarrowPhaseCheckCollision(o1, o2, &query);
+            if(query.result.isCollision()){
+                return true;
+            }
+        }
+    }
+
+    return false;
+    //return RunCheck(report, disabled_pairs);
 }
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)

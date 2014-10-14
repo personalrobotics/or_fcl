@@ -1,0 +1,13 @@
+<package>
+  <description brief="or_fcl">
+	OpenRAVE plugin for FCL collision checking
+  </description>
+  <author>mkoval</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/or_fcl</url>
+  <depend package="openrave" />
+  <export>
+	<openrave plugins="${prefix}/lib" />
+  </export>
+</package>
