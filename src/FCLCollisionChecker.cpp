@@ -849,7 +849,7 @@ auto FCLCollisionChecker::ConvertGeometryToFCL(
         for (size_t itri = 0; itri < num_triangles; ++itri) {
             int const *const tri_indices = &mesh.indices[3 * itri];
             fcl_triangles[itri] = fcl::Triangle(
-                tri_indices[0], tri_indices[2], tri_indices[2]
+                tri_indices[0], tri_indices[1], tri_indices[2]
             );
         }
 
