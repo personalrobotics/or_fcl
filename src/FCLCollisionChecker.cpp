@@ -1,5 +1,4 @@
 #include <boost/range/adaptor/map.hpp>
-#include <boost/foreach.hpp>
 #include <boost/format.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/unordered_map.hpp>
