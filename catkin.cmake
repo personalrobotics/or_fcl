@@ -12,7 +12,7 @@ include_directories(${catkin_INCLUDE_DIRS})
 link_directories(${catkin_LIBRARY_DIRS})
 
 catkin_package(
-    INCLUDE_DIRS include
+    INCLUDE_DIRS src
     LIBRARIES ${PROJECT_NAME}
     CATKIN_DEPENDS fcl openrave_catkin
 )
