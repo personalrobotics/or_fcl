@@ -2,8 +2,8 @@
 Changelog for package or_fcl
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.0 (2015-03-30)
+------------------
 * Changing cmake to reference src directory instead of include directory
 * Made fuerte compatible. bypass broad phase checking.
 * Untested self collision checking.
