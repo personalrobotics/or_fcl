@@ -64,6 +64,7 @@ struct CollisionQuery {
     CollisionReportPtr report;
     std::list<CollisionCallbackFn> callbacks;
     unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
+    unordered_set<std::pair<Link const *, Link const *> > self_enabled_pairs;
 
     bool is_collision;
     int num_narrow;
@@ -304,15 +305,13 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
-    // TODO: handle attached bodies.
-
     // Group 1: link.
     manager1_->clear();
     Synchronize(plink.get(), &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
-    // Group 2: link2.
+    // Group 2: body.
     manager2_->clear();
     Synchronize(pbody.get(), true, false, &group2);
     manager2_->registerObjects(group2);
@@ -325,6 +324,7 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
         KinBodyConstPtr pbody, CollisionReportPtr report)
 {
     unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
+    unordered_set<std::pair<Link const *, Link const *> > self_enabled_pairs;
     CollisionGroup group1, group2;
     
     // Generate the minimal set of possible link-link collisions. This
@@ -340,6 +340,7 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     std::set<int> const &nonadjacent_pairs_raw = pbody->GetNonAdjacentLinks(ao);
     std::vector<std::pair<Link const *, Link const *> > nonadjacent_pairs;
     UnpackLinkPairs(pbody, nonadjacent_pairs_raw, &nonadjacent_pairs);
+    self_enabled_pairs.insert(nonadjacent_pairs.begin(), nonadjacent_pairs.end());
 
     unordered_set<Link const *> group1_links, group2_links;
     for (std::pair<Link const *, Link const *> const &link_pair : nonadjacent_pairs) {
@@ -410,7 +411,7 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     manager2_->registerObjects(group2);
     manager2_->setup();
 
-    return RunCheck(report, disabled_pairs);
+    return RunCheck(report, disabled_pairs, self_enabled_pairs);
 }
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
@@ -444,7 +445,8 @@ FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
 
 bool FCLCollisionChecker::RunCheck(
         CollisionReportPtr report,
-        boost::unordered_set<LinkPair> const &disabled_pairs)
+        boost::unordered_set<LinkPair> const &disabled_pairs,
+        boost::unordered_set<LinkPair> const &self_enabled_pairs)
 {
     CollisionQuery query;
     query.env = GetEnv();
@@ -453,6 +455,7 @@ bool FCLCollisionChecker::RunCheck(
 
     // TODO: We don't need to copy here.
     query.disabled_pairs = disabled_pairs;
+    query.self_enabled_pairs = self_enabled_pairs;
 
     if (options_ & OpenRAVE::CO_Distance) {
         throw OpenRAVE::openrave_exception(
@@ -706,9 +709,11 @@ void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
 bool FCLCollisionChecker::NarrowPhaseCheckCollision(
         fcl::CollisionObject *o1, fcl::CollisionObject *o2, void *data)
 {
+
     auto const query = static_cast<CollisionQuery *>(data);
     LinkConstPtr const plink1 = GetCollisionLink(*o1);
     LinkConstPtr const plink2 = GetCollisionLink(*o2);
+    auto const link_pair = MakeLinkPair(plink1.get(), plink2.get());
 
     // Ignore collision checks with the same object. This might happen if we
     // call a CheckCollision with two parameters that overlap.
@@ -717,7 +722,13 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
     }
     // Ignore disabled pairs of links. MakeLinkPair enforces the invariant that
     // plink1 <= plink2, so we don't need to check (plink2, plink1).
-    else if (query->disabled_pairs.count(MakeLinkPair(plink1.get(), plink2.get()))) {
+    else if (query->disabled_pairs.count(link_pair)) {
+        return false; // Keep going.
+    }
+    // Only check for self collision if links are non-adjacent. Due to a bug
+    // in OpenRAVE, links may be neither adjacent nor non-adjacent.
+    else if (plink1->GetParent() == plink2->GetParent() 
+             && !query->self_enabled_pairs.count(link_pair)) {
         return false; // Keep going.
     }
 

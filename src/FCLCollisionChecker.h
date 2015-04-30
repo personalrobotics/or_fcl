@@ -132,6 +132,8 @@ private:
     bool RunCheck(
         CollisionReportPtr report,
         boost::unordered_set<LinkPair> const &disabled_pairs
+            = boost::unordered_set<LinkPair>(),
+        boost::unordered_set<LinkPair> const &self_enabled_pairs
             = boost::unordered_set<LinkPair>()
     );
 
