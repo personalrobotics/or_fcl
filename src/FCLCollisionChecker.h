@@ -81,7 +81,7 @@ public:
         std::vector<KinBodyConstPtr> const &vbodyexcluded,
         std::vector<LinkConstPtr> const &vlinkexcluded,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         KinBodyConstPtr pbody,
         std::vector<KinBodyConstPtr> const &vbodyexcluded,

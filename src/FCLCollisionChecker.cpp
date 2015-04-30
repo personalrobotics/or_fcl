@@ -320,6 +320,48 @@ bool FCLCollisionChecker::CheckCollision(
     return RunCheck(report);
 }
 
+bool FCLCollisionChecker::CheckCollision(
+    LinkConstPtr plink,
+    std::vector<KinBodyConstPtr> const &vbodyexcluded,
+    std::vector<LinkConstPtr> const &vlinkexcluded,
+    CollisionReportPtr report)
+{
+    unordered_set<KinBodyConstPtr> const excluded_body_set(
+        vbodyexcluded.begin(), vbodyexcluded.end());
+    unordered_set<LinkConstPtr> const excluded_link_set(
+        vlinkexcluded.begin(), vlinkexcluded.end());
+    CollisionGroup group1, group2;
+
+    // Group 1: link.
+    manager1_->clear();
+    Synchronize(plink.get(), &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: all enabled links that are not excluded
+    manager2_->clear();
+
+    std::vector<KinBodyPtr> bodies;
+    GetEnv()->GetBodies(bodies);
+
+    for (KinBodyPtr const &kinbody : bodies) {
+        if (kinbody->IsEnabled() && !excluded_body_set.count(kinbody)) {
+            std::vector<LinkPtr> const &links = kinbody->GetLinks();
+
+            for (LinkPtr const &link : links) {
+                if (link->IsEnabled() && !excluded_link_set.count(link)) {
+                    Synchronize(link.get(), &group2);
+                }
+            }
+        }
+    }
+
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
+
 bool FCLCollisionChecker::CheckStandaloneSelfCollision(
         KinBodyConstPtr pbody, CollisionReportPtr report)
 {
