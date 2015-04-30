@@ -201,9 +201,11 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
-    // Group 1: body1 + attached, active only
+    // TODO: Implement CO_ActiveDOFs for body (as per the documentation).
+
+    // Group 1: body1 + attached
     manager1_->clear();
-    Synchronize(body1.get(), true, true, &group1);
+    Synchronize(body1.get(), true, false, &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
@@ -231,8 +233,8 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
-    // TODO: Implement CO_ActiveDOFs
-    // TODO: Attached bodies.
+    // TODO: Implement CO_ActiveDOFs for pbody1 (as per the documentation).
+    // TODO: Do we need to handle attached bodies in here?
 
     // Group 1: body1 + attached, active only
     manager1_->clear();
@@ -326,10 +328,6 @@ bool FCLCollisionChecker::CheckCollision(
     std::vector<LinkConstPtr> const &vlinkexcluded,
     CollisionReportPtr report)
 {
-    unordered_set<KinBodyConstPtr> const excluded_body_set(
-        vbodyexcluded.begin(), vbodyexcluded.end());
-    unordered_set<LinkConstPtr> const excluded_link_set(
-        vlinkexcluded.begin(), vlinkexcluded.end());
     CollisionGroup group1, group2;
 
     // Group 1: link.
@@ -340,6 +338,60 @@ bool FCLCollisionChecker::CheckCollision(
 
     // Group 2: all enabled links that are not excluded
     manager2_->clear();
+
+    unordered_set<KinBodyConstPtr> const excluded_body_set(
+        vbodyexcluded.begin(), vbodyexcluded.end());
+    unordered_set<LinkConstPtr> excluded_link_set(
+        vlinkexcluded.begin(), vlinkexcluded.end());
+    excluded_link_set.insert(plink);
+
+    std::vector<KinBodyPtr> bodies;
+    GetEnv()->GetBodies(bodies);
+
+    for (KinBodyPtr const &kinbody : bodies) {
+        if (kinbody->IsEnabled() && !excluded_body_set.count(kinbody)) {
+            std::vector<LinkPtr> const &links = kinbody->GetLinks();
+
+            for (LinkPtr const &link : links) {
+                if (link->IsEnabled() && !excluded_link_set.count(link)) {
+                    Synchronize(link.get(), &group2);
+                }
+            }
+        }
+    }
+
+    manager2_->registerObjects(group2);
+    manager2_->setup();
+
+    return RunCheck(report);
+}
+
+bool FCLCollisionChecker::CheckCollision(
+    KinBodyConstPtr pbody,
+    std::vector<KinBodyConstPtr> const &vbodyexcluded,
+    std::vector<LinkConstPtr> const &vlinkexcluded,
+    CollisionReportPtr report)
+{
+    CollisionGroup group1, group2;
+
+    // TODO: Implement CO_ActiveDOFs for pbody (as per the documentation).
+
+    // Group 1: link.
+    manager1_->clear();
+    Synchronize(pbody.get(), false, false, &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+
+    // Group 2: all enabled links that are not excluded
+    manager2_->clear();
+
+    unordered_set<KinBodyConstPtr> excluded_body_set(
+        vbodyexcluded.begin(), vbodyexcluded.end());
+    unordered_set<LinkConstPtr> const excluded_link_set(
+        vlinkexcluded.begin(), vlinkexcluded.end());
+
+    // TODO: Should we ignore pbody here?
+    excluded_body_set.insert(pbody);
 
     std::vector<KinBodyPtr> bodies;
     GetEnv()->GetBodies(bodies);

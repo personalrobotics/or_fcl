@@ -59,14 +59,16 @@ public:
     virtual void RemoveKinBody(OpenRAVE::KinBodyPtr pbody);
 
     virtual bool CheckCollision(
-        KinBodyConstPtr pbody1, CollisionReportPtr report = CollisionReportPtr()
+        KinBodyConstPtr pbody1,
+        CollisionReportPtr report = CollisionReportPtr()
     );
     virtual bool CheckCollision(
         KinBodyConstPtr pbody1, KinBodyConstPtr pbody2,
         CollisionReportPtr report = CollisionReportPtr()
     );
     virtual bool CheckCollision(
-        LinkConstPtr plink, CollisionReportPtr report = CollisionReportPtr()
+        LinkConstPtr plink,
+        CollisionReportPtr report = CollisionReportPtr()
     );
     virtual bool CheckCollision(
         LinkConstPtr plink1, LinkConstPtr plink2,
@@ -87,11 +89,11 @@ public:
         std::vector<KinBodyConstPtr> const &vbodyexcluded,
         std::vector<LinkConstPtr> const &vlinkexcluded,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         RAY const &ray, LinkConstPtr plink,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         RAY const &ray, KinBodyConstPtr pbody,
         CollisionReportPtr report = CollisionReportPtr()
