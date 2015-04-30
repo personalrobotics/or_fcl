@@ -197,34 +197,12 @@ void FCLCollisionChecker::DestroyEnvironment()
 }
 
 bool FCLCollisionChecker::CheckCollision(
-        KinBodyConstPtr body1, CollisionReportPtr report)
+        KinBodyConstPtr body, CollisionReportPtr report)
 {
-    CollisionGroup group1, group2;
+    static std::vector<KinBodyConstPtr> const vbodyexcluded;
+    static std::vector<LinkConstPtr> const vlinkexcluded;
 
-    // TODO: Implement CO_ActiveDOFs for body (as per the documentation).
-
-    // Group 1: body1 + attached
-    manager1_->clear();
-    Synchronize(body1.get(), true, false, &group1);
-    manager1_->registerObjects(group1);
-    manager1_->setup();
-
-    // Group 2: everything else
-    manager2_->clear();
-
-    std::vector<KinBodyPtr> bodies;
-    GetEnv()->GetBodies(bodies);
-
-    for (KinBodyPtr const &body2 : bodies) {
-        if (body2 != body1 && body2->IsEnabled()) {
-            Synchronize(body2.get(), false, false, &group2);
-        }
-    }
-
-    manager2_->registerObjects(group2);
-    manager2_->setup();
-
-    return RunCheck(report);
+    return CheckCollision(body, vbodyexcluded, vlinkexcluded, report);
 } 
 
 bool FCLCollisionChecker::CheckCollision(
@@ -236,9 +214,9 @@ bool FCLCollisionChecker::CheckCollision(
     // TODO: Implement CO_ActiveDOFs for pbody1 (as per the documentation).
     // TODO: Do we need to handle attached bodies in here?
 
-    // Group 1: body1 + attached, active only
+    // Group 1: body1 + attached
     manager1_->clear();
-    Synchronize(pbody1.get(), true, true, &group1);
+    Synchronize(pbody1.get(), true, false , &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
@@ -254,32 +232,10 @@ bool FCLCollisionChecker::CheckCollision(
 bool FCLCollisionChecker::CheckCollision(
         LinkConstPtr plink, CollisionReportPtr report)
 {
-    CollisionGroup group1, group2;
+    static std::vector<KinBodyConstPtr> const vbodyexcluded;
+    static std::vector<LinkConstPtr> const vlinkexcluded;
 
-    // Group 1: link
-    manager1_->clear();
-    Synchronize(plink.get(), &group1);
-    manager1_->registerObjects(group1);
-    manager1_->setup();
-
-    // Group 2: bodies - link's parent
-    manager2_->clear();
-
-    std::vector<KinBodyPtr> bodies;
-    GetEnv()->GetBodies(bodies);
-
-    // TODO: Should we check against plink->GetParent()?
-    for (KinBodyPtr const &body2 : bodies) {
-        if (body2 == plink->GetParent() || !body2->IsEnabled()) {
-            continue;
-        }
-        Synchronize(body2.get(), false, false, &group2);
-    }
-
-    manager2_->registerObjects(group2);
-    manager2_->setup();
-
-    return RunCheck(report);
+    return CheckCollision(plink, vbodyexcluded, vlinkexcluded, report);
 }
 
 bool FCLCollisionChecker::CheckCollision(
