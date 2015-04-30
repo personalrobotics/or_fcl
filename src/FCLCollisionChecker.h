@@ -93,7 +93,7 @@ public:
     virtual bool CheckCollision(
         RAY const &ray, LinkConstPtr plink,
         CollisionReportPtr report = CollisionReportPtr()
-    );
+    ) OR_FCL_DUMMY_IMPLEMENTATION;
     virtual bool CheckCollision(
         RAY const &ray, KinBodyConstPtr pbody,
         CollisionReportPtr report = CollisionReportPtr()
