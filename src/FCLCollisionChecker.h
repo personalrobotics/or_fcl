@@ -139,18 +139,27 @@ private:
             = boost::unordered_set<LinkPair>()
     );
 
-    void Synchronize(OpenRAVE::KinBody const *body,
-                     bool attached, bool active_only,
-                     CollisionGroup *group = NULL);
-    void Synchronize(FCLUserDataPtr const &user_data,
-                     OpenRAVE::KinBody const *body,
-                     bool attached, bool active_only,
-                     CollisionGroup *group = NULL);
-    void Synchronize(OpenRAVE::KinBody::Link const *link,
-                     CollisionGroup *group = NULL);
-    void Synchronize(FCLUserDataPtr const &user_data,
-                     OpenRAVE::KinBody::Link const *link,
-                     CollisionGroup *group = NULL);
+    void Synchronize(
+        OpenRAVE::KinBody const *body,
+        bool attached, bool active_only,
+        CollisionGroup *group = NULL
+    );
+    void Synchronize(
+        FCLUserDataPtr const &user_data,
+        OpenRAVE::KinBody const *body,
+        bool attached, bool active_only,
+        CollisionGroup *group = NULL,
+        boost::unordered_set<OpenRAVE::KinBody const *> *synchronized = NULL
+    );
+    void Synchronize(
+        OpenRAVE::KinBody::Link const *link,
+        CollisionGroup *group = NULL
+    );
+    void Synchronize(
+        FCLUserDataPtr const &user_data,
+        OpenRAVE::KinBody::Link const *link,
+        CollisionGroup *group = NULL
+    );
 
     void UnpackLinkPairs(
         std::set<int> const &packed,
