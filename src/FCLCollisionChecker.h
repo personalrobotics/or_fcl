@@ -59,14 +59,16 @@ public:
     virtual void RemoveKinBody(OpenRAVE::KinBodyPtr pbody);
 
     virtual bool CheckCollision(
-        KinBodyConstPtr pbody1, CollisionReportPtr report = CollisionReportPtr()
+        KinBodyConstPtr pbody1,
+        CollisionReportPtr report = CollisionReportPtr()
     );
     virtual bool CheckCollision(
         KinBodyConstPtr pbody1, KinBodyConstPtr pbody2,
         CollisionReportPtr report = CollisionReportPtr()
     );
     virtual bool CheckCollision(
-        LinkConstPtr plink, CollisionReportPtr report = CollisionReportPtr()
+        LinkConstPtr plink,
+        CollisionReportPtr report = CollisionReportPtr()
     );
     virtual bool CheckCollision(
         LinkConstPtr plink1, LinkConstPtr plink2,
@@ -81,13 +83,13 @@ public:
         std::vector<KinBodyConstPtr> const &vbodyexcluded,
         std::vector<LinkConstPtr> const &vlinkexcluded,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         KinBodyConstPtr pbody,
         std::vector<KinBodyConstPtr> const &vbodyexcluded,
         std::vector<LinkConstPtr> const &vlinkexcluded,
         CollisionReportPtr report = CollisionReportPtr()
-    ) OR_FCL_DUMMY_IMPLEMENTATION;
+    );
     virtual bool CheckCollision(
         RAY const &ray, LinkConstPtr plink,
         CollisionReportPtr report = CollisionReportPtr()
@@ -137,18 +139,27 @@ private:
             = boost::unordered_set<LinkPair>()
     );
 
-    void Synchronize(OpenRAVE::KinBody const *body,
-                     bool attached, bool active_only,
-                     CollisionGroup *group = NULL);
-    void Synchronize(FCLUserDataPtr const &user_data,
-                     OpenRAVE::KinBody const *body,
-                     bool attached, bool active_only,
-                     CollisionGroup *group = NULL);
-    void Synchronize(OpenRAVE::KinBody::Link const *link,
-                     CollisionGroup *group = NULL);
-    void Synchronize(FCLUserDataPtr const &user_data,
-                     OpenRAVE::KinBody::Link const *link,
-                     CollisionGroup *group = NULL);
+    void Synchronize(
+        OpenRAVE::KinBody const *body,
+        bool attached, bool active_only,
+        CollisionGroup *group = NULL
+    );
+    void Synchronize(
+        FCLUserDataPtr const &user_data,
+        OpenRAVE::KinBody const *body,
+        bool attached, bool active_only,
+        CollisionGroup *group = NULL,
+        boost::unordered_set<OpenRAVE::KinBody const *> *synchronized = NULL
+    );
+    void Synchronize(
+        OpenRAVE::KinBody::Link const *link,
+        CollisionGroup *group = NULL
+    );
+    void Synchronize(
+        FCLUserDataPtr const &user_data,
+        OpenRAVE::KinBody::Link const *link,
+        CollisionGroup *group = NULL
+    );
 
     void UnpackLinkPairs(
         std::set<int> const &packed,
