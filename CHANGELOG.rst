@@ -2,6 +2,13 @@
 Changelog for package or_fcl
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fixed bugs we found with table_clearing.
+* Added a dummy implementation of ray checks.
+* Adding ability to pass around enabled pairs
+* Contributors: Jennifer King, Michael Koval
+
 0.1.0 (2015-03-30)
 ------------------
 * Changing cmake to reference src directory instead of include directory
