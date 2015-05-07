@@ -2,8 +2,8 @@
 Changelog for package or_fcl
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.0 (2015-05-06)
+------------------
 * Fixed bugs we found with table_clearing.
 * Added a dummy implementation of ray checks.
 * Adding ability to pass around enabled pairs
