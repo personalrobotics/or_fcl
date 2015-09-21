@@ -144,7 +144,33 @@ class ORFCLTest(unittest.TestCase):
         c2_pose[:3,3] = [0., 0.99, 0.]
         cylinder2.SetTransform(c2_pose)
         self.assertChecks(cylinder1, cylinder2, assert_true=True)
+
+    def test_collisionCheckGrabbedBodies(self):
+        robot = self.penv.ReadRobotXMLFile('robots/barrettwam.robot.xml')
+        self.penv.Add(robot)
+        arm = robot.GetManipulator('arm')
+
+        # Load the cylinder and place it into the palm
+        cylinder = self.loadObject("small_cylinder.kinbody.xml", "cylinder")
+        import numpy
+        cylinder_in_hand = numpy.array([[1., 0., 0., 0.],
+                                        [0., 1., 0., 0.],
+                                        [0., 0., 1., 0.],
+                                        [0., 0., 0., 1.]])
+        cylinder_in_world = numpy.dot(arm.GetEndEffectorTransform(), cylinder_in_hand)
+        cylinder.SetTransform(cylinder_in_world)
         
+        # Close the fingers
+        robot.SetDOFValues([1.2, 1.2, 1.2], dofindices=[7, 8, 9])
+        
+        # Verify collision with ungrabbed body
+        self.assertChecks(robot, cylinder, assert_true=True)
+
+        # Grab
+        robot.Grab(cylinder)
+
+        # Verify no longer collision with grabbed body
+        self.assertChecks(robot, cylinder, assert_true=False)
 
 if __name__ == '__main__':
     unittest.main()
