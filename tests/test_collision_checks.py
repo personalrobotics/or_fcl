@@ -41,6 +41,16 @@ class ORFCLTest(unittest.TestCase):
         self.penv.Add(body)
         return body
 
+    def assertChecks(self, b1, b2, assert_true=True):
+        if assert_true:
+            self.assertTrue(self.penv.CheckCollision(b1, b2))
+            self.assertTrue(self.penv.CheckCollision(b1))
+            self.assertTrue(self.penv.CheckCollision(b2))
+        else:
+            self.assertFalse(self.penv.CheckCollision(b1, b2))
+            self.assertFalse(self.penv.CheckCollision(b1))
+            self.assertFalse(self.penv.CheckCollision(b2))
+
     def test_collisionCheckBoxes(self):
         
         # First load the boxes
@@ -58,14 +68,14 @@ class ORFCLTest(unittest.TestCase):
         b2_pose[:3,3] = [.5, 0., 0.]
         box2.SetTransform(b2_pose)
         
-        self.assertTrue(self.penv.CheckCollision(box1, box2))
+        self.assertChecks(box1, box2, assert_true=True)
 
         # Now move them out of collision and assert false
         b2_pose[:3,3] = [3.01, 0., 0.]
         box2.SetTransform(b2_pose)
-        self.assertFalse(self.penv.CheckCollision(box1, box2))
+        self.assertChecks(box1, box2, assert_true=False)
 
-    def test_collisionCheckBoxes(self):
+    def test_collisionCheckSpheres(self):
         
         # First load the spheres
         sphere1 = self.loadObject("sphere.kinbody.xml", "sphere1")
@@ -75,8 +85,6 @@ class ORFCLTest(unittest.TestCase):
 
         s1_pose = sphere1.GetTransform()
         s2_pose = sphere2.GetTransform()
-
-        s1_pose[:3,3] = [0., 0., 0.]
 
         # First randomly select several poses for the second sphere that are in collision
         import random, numpy
@@ -91,7 +99,7 @@ class ORFCLTest(unittest.TestCase):
             sphere1.SetTransform(s1_pose)
             sphere2.SetTransform(s2_pose)
         
-            self.assertTrue(self.penv.CheckCollision(sphere1, sphere2))
+            self.assertChecks(sphere1, sphere2, assert_true=True)
         
         # Now select several that are out of collision
         for idx in range(10):            
@@ -105,7 +113,38 @@ class ORFCLTest(unittest.TestCase):
             sphere1.SetTransform(s1_pose)
             sphere2.SetTransform(s2_pose)
         
-            self.assertFalse(self.penv.CheckCollision(sphere1, sphere2))
+            self.assertChecks(sphere1, sphere2, assert_true=False)
+
+    def test_collisionCheckCylinders(self):
+        # First load the cylinders
+        cylinder1 = self.loadObject("cylinder.kinbody.xml", "cylinder1")
+        assert cylinder1 is not None
+        cylinder2 = self.loadObject("cylinder.kinbody.xml", "cylinder2")
+        assert cylinder2 is not None
+
+        c1_pose = cylinder1.GetTransform()
+        c2_pose = cylinder2.GetTransform()
+
+        # First put the cylinders in collision and check
+        c1_pose[:3,3] = [0., 0., 0.]
+        c2_pose[:3,3] = [0.5, 0., 0.]
+        cylinder1.SetTransform(c1_pose)
+        cylinder2.SetTransform(c2_pose)
+        self.assertChecks(cylinder1, cylinder2, assert_true=True)
+
+        c2_pose[:3,3] = [2.01, 0., 0.]
+        cylinder2.SetTransform(c2_pose)
+        self.assertChecks(cylinder1, cylinder2, assert_true=False)
+
+        # Height direction
+        c2_pose[:3,3] = [0., 1.01, 0.]
+        cylinder2.SetTransform(c2_pose)
+        self.assertChecks(cylinder1, cylinder2, assert_true=False)
+
+        c2_pose[:3,3] = [0., 0.99, 0.]
+        cylinder2.SetTransform(c2_pose)
+        self.assertChecks(cylinder1, cylinder2, assert_true=True)
+        
 
 if __name__ == '__main__':
     unittest.main()
