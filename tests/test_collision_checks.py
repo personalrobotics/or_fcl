@@ -171,6 +171,38 @@ class ORFCLTest(unittest.TestCase):
 
         # Verify no longer collision with grabbed body
         self.assertChecks(robot, cylinder, assert_true=False)
+        
+    def test_collisionCheckActiveOnly(self):
+        robot = self.penv.ReadRobotXMLFile('robots/barrettwam.robot.xml')
+        self.penv.Add(robot)
+        arm = robot.GetManipulator('arm')
+
+        # Load the cylinder and place it in collision with the upper arm
+        cylinder = self.loadObject("small_cylinder.kinbody.xml", "cylinder")
+        import numpy
+        cylinder_in_arm = numpy.array([[1., 0., 0., 0.],
+                                        [0., 1., 0., 0.],
+                                        [0., 0., 1., -0.85],
+                                        [0., 0., 0., 1.]])
+        cylinder_in_world = numpy.dot(arm.GetEndEffectorTransform(), cylinder_in_arm)
+        cylinder.SetTransform(cylinder_in_world)
+        
+        # Verify collision with ungrabbed body
+        self.assertChecks(robot, cylinder, assert_true=True)
+
+        # Now set all dofs active and try collision checking with the CO_ActiveOnly flag
+        dof_indices = arm.GetArmIndices().tolist() + arm.GetChildDOFIndices()
+        robot.SetActiveDOFs(dof_indices)
+        
+        import openravepy
+        cc = self.penv.GetCollisionChecker()
+        cc.SetCollisionOptions(openravepy.CollisionOptions.ActiveDOFs)
+        self.assertChecks(robot, cylinder, assert_true=True)
+
+        # Now set only the hand active and check
+        dof_indices = arm.GetChildDOFIndices()
+        robot.SetActiveDOFs(dof_indices)
+        self.assertChecks(robot, cylinder, assert_true=False)
 
 if __name__ == '__main__':
     unittest.main()
