@@ -506,16 +506,8 @@ bool FCLCollisionChecker::RunCheck(
     }
 
     // Initialize the report.
-    if (report) {
-        report->options = options_;
-        report->plink1.reset(); 
-        report->plink2.reset(); 
-        report->numCols = 0;
-        report->vLinkColliding.clear();
-        report->minDistance = std::numeric_limits<OpenRAVE::dReal>::max();
-        report->numWithinTol = 0;
-        report->contacts.clear();
-    }
+    if (report)
+        report->Reset(options_);
 
     manager1_->collide(manager2_.get(), &query,
                        &FCLCollisionChecker::NarrowPhaseCheckCollision);
@@ -791,7 +783,12 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
         if (query->report) {
             query->report->plink1 = GetCollisionLink(*o1);
             query->report->plink2 = GetCollisionLink(*o2);
+#ifdef HAVE_REPORT_VLINKCOLLIDING_PAIR
+            query->report->vLinkColliding.push_back(std::make_pair(
+                query->report->plink1,query->report->plink2));
+#else
             query->report->vLinkColliding.push_back(query->report->plink2);
+#endif
             // TODO: Update numCols.
 
             if (query->request.enable_contact) {
