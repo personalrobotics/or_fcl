@@ -10,7 +10,7 @@ class ORFCLTest(unittest.TestCase):
             self.penv = openravepy.Environment()
             self.cchecker = openravepy.RaveCreateCollisionChecker(self.penv, "fcl")
             self.penv.SetCollisionChecker(self.cchecker)
-    
+
     def tearDown(self):
         for body in self.penv.GetBodies():
             self.penv.Remove(body)
@@ -50,7 +50,7 @@ class ORFCLTest(unittest.TestCase):
             self.assertFalse(self.penv.CheckCollision(b1, b2))
             self.assertFalse(self.penv.CheckCollision(b1))
             self.assertFalse(self.penv.CheckCollision(b2))
-
+    
     def test_collisionCheckBoxes(self):
         
         # First load the boxes
@@ -74,7 +74,7 @@ class ORFCLTest(unittest.TestCase):
         b2_pose[:3,3] = [3.01, 0., 0.]
         box2.SetTransform(b2_pose)
         self.assertChecks(box1, box2, assert_true=False)
-
+    
     def test_collisionCheckSpheres(self):
         
         # First load the spheres
@@ -144,11 +144,12 @@ class ORFCLTest(unittest.TestCase):
         c2_pose[:3,3] = [0., 0.99, 0.]
         cylinder2.SetTransform(c2_pose)
         self.assertChecks(cylinder1, cylinder2, assert_true=True)
-
+    
     def test_collisionCheckGrabbedBodies(self):
         robot = self.penv.ReadRobotXMLFile('robots/barrettwam.robot.xml')
         self.penv.Add(robot)
         arm = robot.GetManipulator('arm')
+        
 
         # Load the cylinder and place it into the palm
         cylinder = self.loadObject("small_cylinder.kinbody.xml", "cylinder")
@@ -171,7 +172,7 @@ class ORFCLTest(unittest.TestCase):
 
         # Verify no longer collision with grabbed body
         self.assertChecks(robot, cylinder, assert_true=False)
-        
+    
     def test_collisionCheckActiveOnly(self):
         robot = self.penv.ReadRobotXMLFile('robots/barrettwam.robot.xml')
         self.penv.Add(robot)
@@ -187,7 +188,7 @@ class ORFCLTest(unittest.TestCase):
         cylinder_in_world = numpy.dot(arm.GetEndEffectorTransform(), cylinder_in_arm)
         cylinder.SetTransform(cylinder_in_world)
         
-        # Verify collision with ungrabbed body
+        # Verify collision nothing is marked active
         self.assertChecks(robot, cylinder, assert_true=True)
 
         # Now set all dofs active and try collision checking with the CO_ActiveOnly flag
@@ -202,7 +203,11 @@ class ORFCLTest(unittest.TestCase):
         # Now set only the hand active and check
         dof_indices = arm.GetChildDOFIndices()
         robot.SetActiveDOFs(dof_indices)
-        self.assertChecks(robot, cylinder, assert_true=False)
-
+        
+        self.assertFalse(self.penv.CheckCollision(robot, cylinder))
+        self.assertTrue(self.penv.CheckCollision(cylinder, robot))
+        self.assertFalse(self.penv.CheckCollision(robot))
+        self.assertTrue(self.penv.CheckCollision(cylinder))
+    
 if __name__ == '__main__':
     unittest.main()
