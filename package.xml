@@ -15,4 +15,5 @@
   <run_depend>boost</run_depend>
   <run_depend>fcl</run_depend>
   <run_depend>openrave_catkin</run_depend>
+  <test_depend>python-nose</test_depend>
 </package>

@@ -1,0 +1,7 @@
+<KinBody>
+  <Body name="box" type="dynamic">
+    <Geom type="box">
+      <Extents>1 1 1</Extents>
+    </Geom>
+  </Body>
+</KinBody>

@@ -1,0 +1,7 @@
+<KinBody>
+  <Body name="sphere" type="dynamic">
+    <Geom type="sphere">
+      <Radius>1.0</Radius>
+    </Geom>
+  </Body>
+</KinBody>

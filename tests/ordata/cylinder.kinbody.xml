@@ -1,0 +1,8 @@
+<KinBody>
+  <Body name="cylinder" type="dynamic">
+    <Geom type="cylinder">
+      <radius>1.0</radius>
+      <height>1.0</height>
+    </Geom>
+  </Body>
+</KinBody>

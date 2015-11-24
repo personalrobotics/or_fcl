@@ -214,18 +214,20 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
-    // TODO: Implement CO_ActiveDOFs for pbody1 (as per the documentation).
-    // TODO: Do we need to handle attached bodies in here?
-
-    // Group 1: body1 + attached
+    // Check to see if either of the bodies is grabbing the other
+    if( pbody1->IsAttached(pbody2) ){
+        return false;
+    }
+    
+    // Group 1: body1 + attached, only check active dofs
     manager1_->clear();
-    Synchronize(pbody1.get(), true, false , &group1);
+    Synchronize(pbody1, true, &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
-    // Group 2: body2 + attached
+    // Group 2: body2 + attached, check all links
     manager2_->clear();
-    Synchronize(pbody2.get(), true, false, &group2);
+    Synchronize(pbody2, false, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -274,9 +276,9 @@ bool FCLCollisionChecker::CheckCollision(
 
     // TODO: What if plink is attched to pbody?
 
-    // Group 2: body.
+    // Group 2: body + attached, check all links
     manager2_->clear();
-    Synchronize(pbody.get(), true, false, &group2);
+    Synchronize(pbody, false, &group2); 
     manager2_->registerObjects(group2);
     manager2_->setup();
 
@@ -319,10 +321,12 @@ bool FCLCollisionChecker::CheckCollision(
 
     for (KinBodyPtr const &kinbody : bodies) {
         if (kinbody->IsEnabled() && !excluded_body_set.count(kinbody)) {
-            std::vector<LinkPtr> const &links = kinbody->GetLinks();
+            std::vector<LinkConstPtr> links;
+            bool check_active = false;
+            GetCandidateLinks(kinbody, check_active, links); 
 
-            for (LinkPtr const &link : links) {
-                if (link->IsEnabled() && !excluded_link_set.count(link)) {
+            for (LinkConstPtr const &link : links) {
+                if (!excluded_link_set.count(link)) {
                     Synchronize(link.get(), &group2);
                 }
             }
@@ -336,22 +340,20 @@ bool FCLCollisionChecker::CheckCollision(
 }
 
 bool FCLCollisionChecker::CheckCollision(
-    KinBodyConstPtr pbody,
+    KinBodyConstPtr pbody, 
     std::vector<KinBodyConstPtr> const &vbodyexcluded,
     std::vector<LinkConstPtr> const &vlinkexcluded,
     CollisionReportPtr report)
 {
+
     CollisionGroup group1, group2;
 
-    // TODO: Implement CO_ActiveDOFs for pbody (as per the documentation).
-
-    // Group 1: body.
+    // Group 1: body + attached, respect active dofs.
     manager1_->clear();
-    Synchronize(pbody.get(), true, false, &group1);
+    Synchronize(pbody, true, &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
-    // Group 2: all enabled links that are not excluded
     manager2_->clear();
 
     unordered_set<KinBodyConstPtr> excluded_body_set(
@@ -370,13 +372,16 @@ bool FCLCollisionChecker::CheckCollision(
 
     std::vector<KinBodyPtr> bodies;
     GetEnv()->GetBodies(bodies);
-
+    
     for (KinBodyPtr const &kinbody : bodies) {
         if (kinbody->IsEnabled() && !excluded_body_set.count(kinbody)) {
-            std::vector<LinkPtr> const &links = kinbody->GetLinks();
 
-            for (LinkPtr const &link : links) {
-                if (link->IsEnabled() && !excluded_link_set.count(link)) {
+            std::vector<LinkConstPtr> links;
+            bool check_active = false;
+            GetCandidateLinks(kinbody, check_active, links);
+
+            for (LinkConstPtr const &link : links) {
+                if (!excluded_link_set.count(link)) {
                     Synchronize(link.get(), &group2);
                 }
             }
@@ -467,7 +472,7 @@ auto FCLCollisionChecker::GetCollisionLink(
 }
 
 FCLUserDataPtr FCLCollisionChecker::GetCollisionData(
-        KinBody const *body) const
+        KinBodyConstPtr const &body) const
 {
     UserDataPtr const user_data = body->GetUserData(user_data_);
     return dynamic_pointer_cast<FCLUserData>(user_data);
@@ -564,123 +569,30 @@ std::pair<Link const *, Link const *> FCLCollisionChecker::MakeLinkPair(
     }
 }
 
-void FCLCollisionChecker::Synchronize(KinBody const *body,
-                                      bool attached, bool active_only,
+void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
+                                      bool check_active,
                                       CollisionGroup *group)
 {
-    return Synchronize(GetCollisionData(body), body,
-                       attached, active_only, group);
+    return Synchronize(GetCollisionData(body), body, check_active, group);
 }
 
 void FCLCollisionChecker::Synchronize(
     FCLUserDataPtr const &collision_data,
-    KinBody const *body,
-    bool attached, bool active_only,
-    CollisionGroup *group,
-    boost::unordered_set<OpenRAVE::KinBody const *> *synchronized)
+    KinBodyConstPtr const &body,
+    bool check_active,
+    CollisionGroup *group)
 {
-    // Create an empty set to detect cycles in recursive calls.
-    boost::unordered_set<OpenRAVE::KinBody const *> synchronized_temp;
-    if (!synchronized) {
-        synchronized = &synchronized_temp;
-    }
-
-    if (synchronized->count(body)) {
-        return;
-    } else {
-        synchronized->insert(body);
-    }
-
-    // If this is a robot and we're honoring CO_ActiveDOFs, then only
-    // synchronize the links that are affected by one or more active DOFs.
-    std::vector<LinkConstPtr> body_links;
-    bool const co_activedofs = options_ & OpenRAVE::CO_ActiveDOFs;
-
-    if (body->IsRobot() && co_activedofs && active_only) {
-        auto const robot = dynamic_cast<RobotBase const *>(body);
-
-        // Pre-compute the bodies attached to each link.
-        boost::unordered_map<int, std::vector<KinBodyPtr> > grabbed_map;
-        std::vector<GrabbedInfoPtr> grabbed_infos;
-        robot->GetGrabbedInfo(grabbed_infos);
-
-        for (GrabbedInfoPtr const &grabbed_info : grabbed_infos) {
-            std::string const link_name = grabbed_info->_robotlinkname;
-            LinkPtr const link = robot->GetLink(link_name);
-
-            std::string const grabbed_name = grabbed_info->_grabbedname;
-            KinBodyPtr const grabbed_body = GetEnv()->GetKinBody(grabbed_name);
-
-            if (grabbed_body.get() != robot) {
-                grabbed_map[link->GetIndex()].push_back(grabbed_body);
-            }
-        }
-
-        // Joints may cover more than one DOF (e.g. spherical joints). First,
-        // compute the set of joints that covers the active DOFs.
-        std::vector<int> const &dof_indices = robot->GetActiveDOFIndices();
-        boost::unordered_set<int> active_joint_indices; 
-
-        for (int const &dof_index : dof_indices) {
-            JointPtr const joint = robot->GetJointFromDOFIndex(dof_index);
-            active_joint_indices.insert(joint->GetJointIndex());
-        }
-
-        for (LinkPtr const &link : robot->GetLinks()) {
-            int const link_index = link->GetIndex();
-
-            // Check if the link is affected by the active DOFs.
-            bool is_affected = false;
-            for (int const &joint_index : active_joint_indices) {
-                if (robot->DoesAffect(joint_index, link_index)) {
-                    is_affected = true;
-                    break;
-                }
-            }
-
-            if (is_affected) {
-                // Synchronize the link itself.
-                if (link->IsEnabled()) {
-                    Synchronize(collision_data, link.get(), group);
-                }
-
-                // Synchronize bodies attached to this link.
-                if (attached) {
-                    for (KinBodyPtr const &grabbed_body
-                            : grabbed_map[link_index]) {
-                        Synchronize(collision_data, grabbed_body.get(),
-                                    true, false, group, synchronized);
-                    }
-                }
-            }
-        }
-    }
-    // Otherwise, synchronize all enabled links and attached bodies.
-    else {
-        for (LinkPtr const &link : body->GetLinks()) {
-            if (link->IsEnabled()) {
-                Synchronize(collision_data, link.get(), group);
-            }
-        }
-
-        if (attached) {
-            std::set<KinBodyPtr> attached_bodies;
-            body->GetAttached(attached_bodies);
-
-            for (KinBodyPtr const &attached_body : attached_bodies) {
-                if (attached_body.get() != body && attached_body->IsEnabled()) {
-                    Synchronize(collision_data, attached_body.get(),
-                                true, false, group, synchronized);
-                }
-            }
-        }
+    std::vector<LinkConstPtr> candidate_links;
+    GetCandidateLinks(body, check_active, candidate_links);
+    for (LinkConstPtr const link : candidate_links) {
+        Synchronize(collision_data, link.get(), group);
     }
 }
 
 void FCLCollisionChecker::Synchronize(Link const *link,
                                       CollisionGroup *group)
 {
-    return Synchronize(GetCollisionData(link->GetParent().get()), link, group);
+    Synchronize(GetCollisionData(link->GetParent()), link, group);
 }
 
 void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
@@ -946,6 +858,103 @@ bool FCLCollisionChecker::AreEqual(fcl::Quaternion3f const &x,
     // We only need to check three components since a quaternion only has three
     // degrees of freedom (it has unit length.
     return x.getX() == y.getX() && x.getY() == y.getY() && x.getZ() == y.getZ();
+}
+
+void FCLCollisionChecker::GetCandidateLinks(KinBodyConstPtr const &pbody,
+                                            bool check_active, 
+                                            std::vector<LinkConstPtr> &candidates,
+                                            boost::unordered_set<KinBody const *> *checked_bodies) {
+    // Create an empty set to detect cycles in recursive calls.
+    boost::unordered_set<KinBody const *> checked_body_temp;
+    if(!checked_bodies) {
+        checked_bodies = &checked_body_temp;
+    }
+
+    if(checked_bodies->count(pbody.get())){
+        return;
+    }
+    checked_bodies->insert(pbody.get());
+
+    // If this is a robot and we're honoring CO_ActiveDOFs, then only
+    // synchronize the links that are affected by one or more active DOFs.
+    std::vector<LinkConstPtr> body_links;
+    bool const co_activedofs = options_ & OpenRAVE::CO_ActiveDOFs;
+
+    if (check_active && pbody->IsRobot() && co_activedofs) {
+        RobotBaseConstPtr const robot = dynamic_pointer_cast<RobotBase const>(pbody);
+
+        // Pre-compute the bodies attached to each link.
+        boost::unordered_map<int, std::vector<KinBodyPtr> > grabbed_map;
+        std::vector<GrabbedInfoPtr> grabbed_infos;
+        robot->GetGrabbedInfo(grabbed_infos);
+
+        for (GrabbedInfoPtr const &grabbed_info : grabbed_infos) {
+            std::string const link_name = grabbed_info->_robotlinkname;
+            LinkPtr const link = robot->GetLink(link_name);
+
+            std::string const grabbed_name = grabbed_info->_grabbedname;
+            KinBodyPtr const grabbed_body = GetEnv()->GetKinBody(grabbed_name);
+
+            if (grabbed_body.get() != robot.get()) {
+                grabbed_map[link->GetIndex()].push_back(grabbed_body);
+            }
+        }
+
+        // Joints may cover more than one DOF (e.g. spherical joints). First,
+        // compute the set of joints that covers the active DOFs.
+        std::vector<int> const &dof_indices = robot->GetActiveDOFIndices();
+        boost::unordered_set<int> active_joint_indices; 
+
+        for (int const &dof_index : dof_indices) {
+            JointPtr const joint = robot->GetJointFromDOFIndex(dof_index);
+            active_joint_indices.insert(joint->GetJointIndex());
+        }
+
+        for (LinkPtr const &link : robot->GetLinks()) {
+            int const link_index = link->GetIndex();
+
+            // Check if the link is affected by the active DOFs.
+            bool is_affected = false;
+            for (int const &joint_index : active_joint_indices) {
+                if (robot->DoesAffect(joint_index, link_index)) {
+                    is_affected = true;
+                    break;
+                }
+            }
+
+            if (is_affected) {
+                // Synchronize the link itself.
+                if (link->IsEnabled()) {
+                    candidates.push_back(link);
+                }
+
+                // Get links for all bodies attached to this link.
+                for (KinBodyPtr const &grabbed_body
+                         : grabbed_map[link_index]) {
+                    GetCandidateLinks(grabbed_body, check_active, candidates, checked_bodies);
+                }
+            }
+        }
+    }
+    // Otherwise, synchronize all enabled links and attached bodies.
+    else {
+        for (LinkPtr const &link : pbody->GetLinks()) {
+            if (link->IsEnabled()) {
+                candidates.push_back(link);
+            }
+        }
+
+        std::set<KinBodyPtr> attached_bodies;
+        pbody->GetAttached(attached_bodies);
+        
+        for (KinBodyPtr const &attached_body : attached_bodies) {
+            if (attached_body.get() != pbody.get() && attached_body->IsEnabled()) {
+                GetCandidateLinks(attached_body, check_active, candidates, checked_bodies);
+            }
+        }
+    }
+
+    
 }
 
 }

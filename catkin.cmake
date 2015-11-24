@@ -52,3 +52,10 @@ target_link_libraries(${PROJECT_NAME}_plugin
     ${Boost_LIBRARIES}
     ${fcl_LIBRARIES}
 )
+
+if (CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(tests)
+  install(DIRECTORY "tests/ordata/"
+    DESTINATION "${OpenRAVE_INSTALL_DIR}/${OpenRAVE_DATA_DIR}"
+  )
+endif()

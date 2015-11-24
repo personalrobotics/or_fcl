@@ -129,7 +129,7 @@ private:
     MeshFactory mesh_factory_;
     BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
-    FCLUserDataPtr GetCollisionData(OpenRAVE::KinBody const *body) const;
+    FCLUserDataPtr GetCollisionData(OpenRAVE::KinBodyConstPtr const &body) const;
 
     bool RunCheck(
         CollisionReportPtr report,
@@ -139,17 +139,21 @@ private:
             = boost::unordered_set<LinkPair>()
     );
 
+    void GetCandidateLinks(OpenRAVE::KinBodyConstPtr const &pbody,
+                           bool check_active,
+                           std::vector<LinkConstPtr> &candidates,
+                           boost::unordered_set<OpenRAVE::KinBody const *> *checked_bodies = NULL);
+
     void Synchronize(
-        OpenRAVE::KinBody const *body,
-        bool attached, bool active_only,
+        OpenRAVE::KinBodyConstPtr const &body,
+        bool check_active,
         CollisionGroup *group = NULL
     );
     void Synchronize(
         FCLUserDataPtr const &user_data,
-        OpenRAVE::KinBody const *body,
-        bool attached, bool active_only,
-        CollisionGroup *group = NULL,
-        boost::unordered_set<OpenRAVE::KinBody const *> *synchronized = NULL
+        OpenRAVE::KinBodyConstPtr const &body,
+        bool check_active,
+        CollisionGroup *group = NULL
     );
     void Synchronize(
         OpenRAVE::KinBody::Link const *link,
