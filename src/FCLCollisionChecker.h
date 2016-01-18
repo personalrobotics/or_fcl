@@ -139,30 +139,39 @@ private:
             = boost::unordered_set<LinkPair>()
     );
 
-    void GetCandidateLinks(OpenRAVE::KinBodyConstPtr const &pbody,
-                           bool check_active,
-                           std::vector<LinkConstPtr> &candidates,
-                           boost::unordered_set<OpenRAVE::KinBody const *> *checked_bodies = NULL);
+    /* If robot is passed, then any of its inactive links,
+     * or grabbed kinbody attached to one of its inactive links,
+     * will not be synchronized into the group.
+     * This method is usually used for pbody1 as a left argument to
+     * CheckCollision().
+     * This will check for the enabled status of all children before
+     * synchronizing them.
+     */
+    void SynchronizeKinbodies(
+        std::set<OpenRAVE::KinBodyPtr> const &attached_kinbodies,
+        boost::unordered_set<KinBodyConstPtr> const &excluded_kinbody_set,
+        boost::unordered_set<LinkConstPtr> const &excluded_link_set,
+        CollisionGroup *group,
+        OpenRAVE::RobotBaseConstPtr robot = OpenRAVE::RobotBaseConstPtr()
+    );
 
-    void Synchronize(
-        OpenRAVE::KinBodyConstPtr const &body,
-        bool check_active,
-        CollisionGroup *group = NULL
+    /* Add all links in this kinbody, except if they're in the
+     * excluded_link_set.
+     * (Caller will add inactive links there, e.g. in case CO_ActiveDOFS is set)
+     * Will not checked if the kinbody is enabled (do that yourself!) 
+     */
+    void SynchronizeKinbody(
+        OpenRAVE::KinBodyConstPtr const &kinbody,
+        boost::unordered_set<LinkConstPtr> const &excluded_link_set,
+        CollisionGroup *group
     );
-    void Synchronize(
-        FCLUserDataPtr const &user_data,
-        OpenRAVE::KinBodyConstPtr const &body,
-        bool check_active,
-        CollisionGroup *group = NULL
-    );
-    void Synchronize(
-        OpenRAVE::KinBody::Link const *link,
-        CollisionGroup *group = NULL
-    );
-    void Synchronize(
+
+    /* Synchronize a single link.
+     * Will not checked if the link is enabled (do that yourself!) */
+    void SynchronizeLink(
         FCLUserDataPtr const &user_data,
         OpenRAVE::KinBody::Link const *link,
-        CollisionGroup *group = NULL
+        CollisionGroup *group
     );
 
     void UnpackLinkPairs(
