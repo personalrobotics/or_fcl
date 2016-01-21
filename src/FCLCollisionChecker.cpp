@@ -626,30 +626,25 @@ void FCLCollisionChecker::SynchronizeKinbodies(
         // compute the set of joints that covers the active DOFs.
         std::vector<int> const &active_dofs = robot->GetActiveDOFIndices();
         
-        std::vector<bool> active_joints(robot->GetJoints().size(), false); 
+        std::set<int> active_joint_indices;
         for (int const &active_dof : active_dofs) {
             JointPtr const active_joint = robot->GetJointFromDOFIndex(active_dof);
-            active_joints[active_joint->GetJointIndex()] = true;
+            active_joint_indices.insert(active_joint->GetJointIndex());
         }
         
         // compute inactive links
         boost::unordered_set<LinkConstPtr> inactive_link_set;
-        for (size_t link_index=0; link_index<robot->GetLinks().size(); link_index++) {
-            
-            size_t joint_index = 0;
-            for (; joint_index<active_joints.size(); joint_index++) {
-                if (!active_joints[joint_index]) {
-                    continue;
-                }
-                if (robot->DoesAffect(joint_index, link_index)) {
+        for (LinkPtr link : robot->GetLinks()) {
+            bool link_is_active = false;
+            for (int active_joint_index : active_joint_indices) {
+                if (robot->DoesAffect(active_joint_index, link->GetIndex())) {
+                    link_is_active = true;
                     break;
                 }
             }
-            if (joint_index<active_joints.size()) {
-                continue;
+            if (!link_is_active) {
+                inactive_link_set.insert(link);
             }
-            
-            inactive_link_set.insert(robot->GetLinks()[link_index]);
         }
         
         // iterate over attached kinbodies
