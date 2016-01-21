@@ -659,12 +659,10 @@ void FCLCollisionChecker::SynchronizeKinbodies(
             }
             
             // if this is the robot itself,
-            // include the inactive links we calculated into the exclude set
+            // include the inactive links we calculated into its exclude set
             if (kinbody == robot) {
                 boost::unordered_set<LinkConstPtr> robot_excluded_link_set = excluded_link_set;
-                for (auto inactive_link=inactive_link_set.begin(); inactive_link!=inactive_link_set.end(); inactive_link++) {
-                    robot_excluded_link_set.insert(*inactive_link);
-                }
+                robot_excluded_link_set.insert(inactive_link_set.begin(), inactive_link_set.end());
                 SynchronizeKinbody(kinbody, robot_excluded_link_set, group);
                 continue;
             }
