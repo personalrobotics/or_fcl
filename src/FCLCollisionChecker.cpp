@@ -223,7 +223,7 @@ bool FCLCollisionChecker::CheckCollision(
     CollisionGroup group1, group2;
 
     // Check to see if either of the bodies is grabbing the other
-    if (!pbody1->IsEnabled() || !pbody2->IsEnabled() || pbody1->IsAttached(pbody2)) {
+    if( pbody1->IsAttached(pbody2) ){
         return false;
     }
     
@@ -654,7 +654,7 @@ void FCLCollisionChecker::SynchronizeKinbodies(
         
         // iterate over attached kinbodies
         for (KinBodyPtr const &kinbody : attached_kinbodies) {
-            if (excluded_kinbody_set.count(kinbody)) {
+            if (!kinbody->IsEnabled() || excluded_kinbody_set.count(kinbody)) {
                 continue;
             }
             
@@ -686,7 +686,7 @@ void FCLCollisionChecker::SynchronizeKinbodies(
             
     } else {
         for (KinBodyPtr const &kinbody : attached_kinbodies) {
-            if (excluded_kinbody_set.count(kinbody)) {
+            if (!kinbody->IsEnabled() || excluded_kinbody_set.count(kinbody)) {
                 continue;
             }
             SynchronizeKinbody(kinbody, excluded_link_set, group);
