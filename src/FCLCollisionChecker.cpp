@@ -199,15 +199,23 @@ void FCLCollisionChecker::DestroyEnvironment()
     }
 }
 
+/* checks collision of a body and a scene.
+ * Attached bodies are respected.
+ * If CO_ActiveDOFs is set, will only check affected links of the body.
+ */
 bool FCLCollisionChecker::CheckCollision(
         KinBodyConstPtr body, CollisionReportPtr report)
 {
-    static std::vector<KinBodyConstPtr> const vbodyexcluded;
-    static std::vector<LinkConstPtr> const vlinkexcluded;
+    static std::vector<KinBodyConstPtr> const vbodyexcluded_empty;
+    static std::vector<LinkConstPtr> const vlinkexcluded_empty;
 
-    return CheckCollision(body, vbodyexcluded, vlinkexcluded, report);
+    return CheckCollision(body, vbodyexcluded_empty, vlinkexcluded_empty, report);
 } 
 
+/* checks collision between two bodies.
+ * Attached bodies are respected.
+ * If CO_ActiveDOFs is set, will only check affected links of the pbody1.
+ */
 bool FCLCollisionChecker::CheckCollision(
         KinBodyConstPtr pbody1, KinBodyConstPtr pbody2,
         CollisionReportPtr report)
@@ -219,72 +227,115 @@ bool FCLCollisionChecker::CheckCollision(
         return false;
     }
     
+    // is pbody1 a robot whose activedofs we should respect?
+    OpenRAVE::RobotBaseConstPtr robot1;
+    if (pbody1->IsRobot() && (options_ & OpenRAVE::CO_ActiveDOFs)) {
+        robot1 = dynamic_pointer_cast<RobotBase const>(pbody1);
+    }
+    
+    // get kinbodies attached to each kinbody
+    std::set<KinBodyPtr> attached_kinbodies1;
+    std::set<KinBodyPtr> attached_kinbodies2;
+    pbody1->GetAttached(attached_kinbodies1);
+    pbody2->GetAttached(attached_kinbodies2);
+    
+    static unordered_set<KinBodyConstPtr> const empty_body_set;
+    static unordered_set<LinkConstPtr> const empty_link_set;
+    
     // Group 1: body1 + attached, only check active dofs
     manager1_->clear();
-    Synchronize(pbody1, true, &group1);
+    SynchronizeKinbodies(attached_kinbodies1, empty_body_set, empty_link_set, &group1, robot1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
     // Group 2: body2 + attached, check all links
     manager2_->clear();
-    Synchronize(pbody2, false, &group2);
+    SynchronizeKinbodies(attached_kinbodies2, empty_body_set, empty_link_set, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
     return RunCheck(report);
 }
 
+/* checks collision of a link and a scene.
+ * Attached bodies are ignored.
+ * CO_ActiveDOFs option is ignored.
+ */
 bool FCLCollisionChecker::CheckCollision(
         LinkConstPtr plink, CollisionReportPtr report)
 {
-    static std::vector<KinBodyConstPtr> const vbodyexcluded;
-    static std::vector<LinkConstPtr> const vlinkexcluded;
+    static std::vector<KinBodyConstPtr> const vbodyexcluded_empty;
+    static std::vector<LinkConstPtr> const vlinkexcluded_empty;
 
-    return CheckCollision(plink, vbodyexcluded, vlinkexcluded, report);
+    return CheckCollision(plink, vbodyexcluded_empty, vlinkexcluded_empty, report);
 }
 
+/* checks collision of two links.
+ * Attached bodies are ignored.
+ * CO_ActiveDOFs option is ignored.
+ */
 bool FCLCollisionChecker::CheckCollision(
         LinkConstPtr link1, LinkConstPtr link2, CollisionReportPtr report)
 {
     CollisionGroup group1, group2;
 
+    if (!link1->IsEnabled() || !link2->IsEnabled())
+        return false;
+
     // Group 1: link1.
     manager1_->clear();
-    Synchronize(link1.get(), &group1);
+    SynchronizeLink(GetCollisionData(link1->GetParent()), link1.get(), &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
     // Group 2: link2.
     manager2_->clear();
-    Synchronize(link2.get(), &group2);
+    SynchronizeLink(GetCollisionData(link2->GetParent()), link2.get(), &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
     return RunCheck(report);
 }
 
+/* checks collision of a link and a body.
+ * Attached bodies for pbody are respected.
+ * CO_ActiveDOFs option is ignored.
+ */
 bool FCLCollisionChecker::CheckCollision(
     LinkConstPtr plink, KinBodyConstPtr pbody, CollisionReportPtr report)
 {
     CollisionGroup group1, group2;
+    
+    // Check to see if either of the bodies is grabbing the other
+    // (this would be a self-collision instead!)
+    if (!plink->IsEnabled() || plink->GetParent()->IsAttached(pbody)) {
+        return false;
+    }
+    
+    static unordered_set<KinBodyConstPtr> const empty_body_set;
+    static unordered_set<LinkConstPtr> const empty_link_set;
 
     // Group 1: link.
     manager1_->clear();
-    Synchronize(plink.get(), &group1);
+    SynchronizeLink(GetCollisionData(plink->GetParent()), plink.get(), &group1);
     manager1_->registerObjects(group1);
     manager1_->setup();
 
-    // TODO: What if plink is attched to pbody?
-
     // Group 2: body + attached, check all links
+    std::set<KinBodyPtr> attached_kinbodies;
+    pbody->GetAttached(attached_kinbodies);
     manager2_->clear();
-    Synchronize(pbody, false, &group2); 
+    SynchronizeKinbodies(attached_kinbodies, empty_body_set, empty_link_set, &group2);
     manager2_->registerObjects(group2);
     manager2_->setup();
 
     return RunCheck(report);
 }
 
+/* checks collision of a link and a scene.
+ * Attached bodies are ignored.
+ * CO_ActiveDOFs option is ignored.
+ */
 bool FCLCollisionChecker::CheckCollision(
     LinkConstPtr plink,
     std::vector<KinBodyConstPtr> const &vbodyexcluded,
@@ -293,43 +344,35 @@ bool FCLCollisionChecker::CheckCollision(
 {
     CollisionGroup group1, group2;
 
-    // Group 1: link.
-    manager1_->clear();
-    Synchronize(plink.get(), &group1);
-    manager1_->registerObjects(group1);
-    manager1_->setup();
-
-    // Group 2: all enabled links that are not excluded
-    manager2_->clear();
-
     unordered_set<KinBodyConstPtr> excluded_body_set(
         vbodyexcluded.begin(), vbodyexcluded.end());
     unordered_set<LinkConstPtr> excluded_link_set(
         vlinkexcluded.begin(), vlinkexcluded.end());
-    excluded_link_set.insert(plink);
-
-    // TODO: Should we ignore collisions with plink->GetParent()?
-    std::set<KinBodyPtr> attached_bodies;
-    plink->GetParent()->GetAttached(attached_bodies);
-
-    for (KinBodyPtr const &attached_body : attached_bodies) {
-        excluded_body_set.insert(attached_body);
+    
+    if (!plink->IsEnabled() || excluded_link_set.count(plink))
+        return false;
+    
+    // Group 1: link.
+    KinBodyPtr pbody = plink->GetParent();
+    manager1_->clear();
+    SynchronizeLink(GetCollisionData(pbody), plink.get(), &group1);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+    
+    // exclude kinbodies attached to the link's body (would be self)
+    std::set<KinBodyPtr> attached_kinbodies;
+    pbody->GetAttached(attached_kinbodies);
+    for (auto it=attached_kinbodies.begin(); it!=attached_kinbodies.end(); it++) {
+        excluded_body_set.insert(*it);
     }
 
-    std::vector<KinBodyPtr> bodies;
-    GetEnv()->GetBodies(bodies);
-
-    for (KinBodyPtr const &kinbody : bodies) {
+    // Group 2: all enabled links that are not excluded or attached to pbody
+    manager2_->clear();
+    std::vector<KinBodyPtr> kinbodies;
+    GetEnv()->GetBodies(kinbodies);
+    for (KinBodyPtr const &kinbody : kinbodies) {
         if (kinbody->IsEnabled() && !excluded_body_set.count(kinbody)) {
-            std::vector<LinkConstPtr> links;
-            bool check_active = false;
-            GetCandidateLinks(kinbody, check_active, links); 
-
-            for (LinkConstPtr const &link : links) {
-                if (!excluded_link_set.count(link)) {
-                    Synchronize(link.get(), &group2);
-                }
-            }
+            SynchronizeKinbody(kinbody, excluded_link_set, &group2);
         }
     }
 
@@ -339,6 +382,10 @@ bool FCLCollisionChecker::CheckCollision(
     return RunCheck(report);
 }
 
+/* checks collision of a body and a scene.
+ * Attached bodies are respected.
+ * If CO_ActiveDOFs is set, will only check affected links of pbody.
+ */
 bool FCLCollisionChecker::CheckCollision(
     KinBodyConstPtr pbody, 
     std::vector<KinBodyConstPtr> const &vbodyexcluded,
@@ -348,43 +395,40 @@ bool FCLCollisionChecker::CheckCollision(
 
     CollisionGroup group1, group2;
 
-    // Group 1: body + attached, respect active dofs.
-    manager1_->clear();
-    Synchronize(pbody, true, &group1);
-    manager1_->registerObjects(group1);
-    manager1_->setup();
-
-    manager2_->clear();
-
+    // convert excluded bodies/links
     unordered_set<KinBodyConstPtr> excluded_body_set(
         vbodyexcluded.begin(), vbodyexcluded.end());
     unordered_set<LinkConstPtr> const excluded_link_set(
         vlinkexcluded.begin(), vlinkexcluded.end());
+    
+    // is there a robot whose activedofs we should respect?
+    OpenRAVE::RobotBaseConstPtr robot;
+    if (pbody->IsRobot() && (options_ & OpenRAVE::CO_ActiveDOFs)) {
+        robot = dynamic_pointer_cast<RobotBase const>(pbody);
+    }
+    
+    // get kinbodies attached to pbody
+    std::set<KinBodyPtr> attached_kinbodies;
+    pbody->GetAttached(attached_kinbodies);
 
-    // Ignore collision with attached bodies. This always always includes
-    // ourself (pbody).
-    std::set<KinBodyPtr> attached_bodies;
-    pbody->GetAttached(attached_bodies);
-
-    for (KinBodyPtr const &attached_body : attached_bodies) {
-        excluded_body_set.insert(attached_body);
+    // Group 1: body + attached, respect active dofs.
+    manager1_->clear();
+    SynchronizeKinbodies(attached_kinbodies, excluded_body_set, excluded_link_set, &group1, robot);
+    manager1_->registerObjects(group1);
+    manager1_->setup();
+    
+    for (auto it=attached_kinbodies.begin(); it!=attached_kinbodies.end(); it++) {
+        excluded_body_set.insert(*it);
     }
 
-    std::vector<KinBodyPtr> bodies;
-    GetEnv()->GetBodies(bodies);
+    // Group 2: all other enabled kinbodies in environment
+    manager2_->clear();
     
-    for (KinBodyPtr const &kinbody : bodies) {
+    std::vector<KinBodyPtr> kinbodies;
+    GetEnv()->GetBodies(kinbodies);
+    for (KinBodyPtr const &kinbody : kinbodies) {
         if (kinbody->IsEnabled() && !excluded_body_set.count(kinbody)) {
-
-            std::vector<LinkConstPtr> links;
-            bool check_active = false;
-            GetCandidateLinks(kinbody, check_active, links);
-
-            for (LinkConstPtr const &link : links) {
-                if (!excluded_link_set.count(link)) {
-                    Synchronize(link.get(), &group2);
-                }
-            }
+            SynchronizeKinbody(kinbody, excluded_link_set, &group2);
         }
     }
 
@@ -407,7 +451,7 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     // AO_Enabled so the output can be used to determine which grabbed
     // objects should be considered.
     int ao = 0;
-    if (pbody->IsRobot() && options_ & OpenRAVE::CO_ActiveDOFs) {
+    if (pbody->IsRobot() && (options_ & OpenRAVE::CO_ActiveDOFs)) {
         ao |= OpenRAVE::KinBody::AO_ActiveDOFs;
     }
 
@@ -420,13 +464,13 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     for (std::pair<Link const *, Link const *> const &link_pair : nonadjacent_pairs) {
         Link const *link1 = link_pair.first;
         if (link1->IsEnabled() && !group1_links.count(link1)) {
-            Synchronize(link1, &group1);
+            SynchronizeLink(GetCollisionData(link1->GetParent()), link1, &group1);
             group1_links.insert(link1);
         }
 
         Link const *link2 = link_pair.second;
         if (link2->IsEnabled() && !group2_links.count(link2)) {
-            Synchronize(link2, &group2);
+            SynchronizeLink(GetCollisionData(link1->GetParent()), link2, &group2);
             group2_links.insert(link2);
         }
     }
@@ -569,35 +613,101 @@ std::pair<Link const *, Link const *> FCLCollisionChecker::MakeLinkPair(
     }
 }
 
-void FCLCollisionChecker::Synchronize(KinBodyConstPtr const &body,
-                                      bool check_active,
-                                      CollisionGroup *group)
-{
-    return Synchronize(GetCollisionData(body), body, check_active, group);
-}
-
-void FCLCollisionChecker::Synchronize(
-    FCLUserDataPtr const &collision_data,
-    KinBodyConstPtr const &body,
-    bool check_active,
-    CollisionGroup *group)
-{
-    std::vector<LinkConstPtr> candidate_links;
-    GetCandidateLinks(body, check_active, candidate_links);
-    for (LinkConstPtr const link : candidate_links) {
-        Synchronize(collision_data, link.get(), group);
+void FCLCollisionChecker::SynchronizeKinbodies(
+        std::set<KinBodyPtr> const &attached_kinbodies,
+        boost::unordered_set<KinBodyConstPtr> const &excluded_kinbody_set,
+        boost::unordered_set<LinkConstPtr> const &excluded_link_set,
+        CollisionGroup *group,
+        OpenRAVE::RobotBaseConstPtr robot)
+{    
+    if (robot) {
+        
+        // Joints may cover more than one DOF (e.g. spherical joints). First,
+        // compute the set of joints that covers the active DOFs.
+        std::vector<int> const &active_dofs = robot->GetActiveDOFIndices();
+        
+        std::set<int> active_joint_indices;
+        for (int const &active_dof : active_dofs) {
+            JointPtr const active_joint = robot->GetJointFromDOFIndex(active_dof);
+            active_joint_indices.insert(active_joint->GetJointIndex());
+        }
+        
+        // compute inactive links
+        boost::unordered_set<LinkConstPtr> inactive_link_set;
+        for (LinkPtr link : robot->GetLinks()) {
+            bool link_is_active = false;
+            for (int active_joint_index : active_joint_indices) {
+                if (robot->DoesAffect(active_joint_index, link->GetIndex())) {
+                    link_is_active = true;
+                    break;
+                }
+            }
+            if (!link_is_active) {
+                inactive_link_set.insert(link);
+            }
+        }
+        
+        // iterate over attached kinbodies
+        for (KinBodyPtr const &kinbody : attached_kinbodies) {
+            if (!kinbody->IsEnabled() || excluded_kinbody_set.count(kinbody)) {
+                continue;
+            }
+            
+            // if this is the robot itself,
+            // include the inactive links we calculated into its exclude set
+            if (kinbody == robot) {
+                boost::unordered_set<LinkConstPtr> robot_excluded_link_set = excluded_link_set;
+                robot_excluded_link_set.insert(inactive_link_set.begin(), inactive_link_set.end());
+                SynchronizeKinbody(kinbody, robot_excluded_link_set, group);
+                continue;
+            }
+            
+            // if the kinbody is grabbed by an inactive robot link, skip it
+            LinkPtr const robot_link = robot->IsGrabbing(kinbody);
+            if (robot_link)
+            {
+                if (inactive_link_set.count(robot_link)) {
+                    continue;
+                }
+            }
+            
+            // it's just a kinbody (maybe a parent robot)?
+            // or maybe it's grabbed by an active robot link
+            // so check everything
+            SynchronizeKinbody(kinbody, excluded_link_set, group);
+        }
+            
+    } else {
+        for (KinBodyPtr const &kinbody : attached_kinbodies) {
+            if (!kinbody->IsEnabled() || excluded_kinbody_set.count(kinbody)) {
+                continue;
+            }
+            SynchronizeKinbody(kinbody, excluded_link_set, group);
+        }
     }
 }
 
-void FCLCollisionChecker::Synchronize(Link const *link,
-                                      CollisionGroup *group)
+void FCLCollisionChecker::SynchronizeKinbody(
+        OpenRAVE::KinBodyConstPtr const &kinbody,
+        boost::unordered_set<LinkConstPtr> const &excluded_link_set,
+        CollisionGroup *group)
 {
-    Synchronize(GetCollisionData(link->GetParent()), link, group);
+    // get user data pointer from kinbody
+    FCLUserDataPtr const &collision_data = GetCollisionData(kinbody);
+    
+    // synchronize all non-excluded links
+    for (LinkPtr const &link : kinbody->GetLinks()) {
+        if (!link->IsEnabled() || excluded_link_set.count(link)) {
+            continue;
+        }
+        SynchronizeLink(collision_data, link.get(), group);
+    }
 }
 
-void FCLCollisionChecker::Synchronize(FCLUserDataPtr const &collision_data,
-                                      Link const *link,
-                                      CollisionGroup *group)
+void FCLCollisionChecker::SynchronizeLink(
+        FCLUserDataPtr const &collision_data,
+        Link const *link,
+        CollisionGroup *group)
 {
     OpenRAVE::Transform const link_pose = link->GetTransform();
 
@@ -860,101 +970,4 @@ bool FCLCollisionChecker::AreEqual(fcl::Quaternion3f const &x,
     return x.getX() == y.getX() && x.getY() == y.getY() && x.getZ() == y.getZ();
 }
 
-void FCLCollisionChecker::GetCandidateLinks(KinBodyConstPtr const &pbody,
-                                            bool check_active, 
-                                            std::vector<LinkConstPtr> &candidates,
-                                            boost::unordered_set<KinBody const *> *checked_bodies) {
-    // Create an empty set to detect cycles in recursive calls.
-    boost::unordered_set<KinBody const *> checked_body_temp;
-    if(!checked_bodies) {
-        checked_bodies = &checked_body_temp;
-    }
-
-    if(checked_bodies->count(pbody.get())){
-        return;
-    }
-    checked_bodies->insert(pbody.get());
-
-    // If this is a robot and we're honoring CO_ActiveDOFs, then only
-    // synchronize the links that are affected by one or more active DOFs.
-    std::vector<LinkConstPtr> body_links;
-    bool const co_activedofs = options_ & OpenRAVE::CO_ActiveDOFs;
-
-    if (check_active && pbody->IsRobot() && co_activedofs) {
-        RobotBaseConstPtr const robot = dynamic_pointer_cast<RobotBase const>(pbody);
-
-        // Pre-compute the bodies attached to each link.
-        boost::unordered_map<int, std::vector<KinBodyPtr> > grabbed_map;
-        std::vector<GrabbedInfoPtr> grabbed_infos;
-        robot->GetGrabbedInfo(grabbed_infos);
-
-        for (GrabbedInfoPtr const &grabbed_info : grabbed_infos) {
-            std::string const link_name = grabbed_info->_robotlinkname;
-            LinkPtr const link = robot->GetLink(link_name);
-
-            std::string const grabbed_name = grabbed_info->_grabbedname;
-            KinBodyPtr const grabbed_body = GetEnv()->GetKinBody(grabbed_name);
-
-            if (grabbed_body.get() != robot.get()) {
-                grabbed_map[link->GetIndex()].push_back(grabbed_body);
-            }
-        }
-
-        // Joints may cover more than one DOF (e.g. spherical joints). First,
-        // compute the set of joints that covers the active DOFs.
-        std::vector<int> const &dof_indices = robot->GetActiveDOFIndices();
-        boost::unordered_set<int> active_joint_indices; 
-
-        for (int const &dof_index : dof_indices) {
-            JointPtr const joint = robot->GetJointFromDOFIndex(dof_index);
-            active_joint_indices.insert(joint->GetJointIndex());
-        }
-
-        for (LinkPtr const &link : robot->GetLinks()) {
-            int const link_index = link->GetIndex();
-
-            // Check if the link is affected by the active DOFs.
-            bool is_affected = false;
-            for (int const &joint_index : active_joint_indices) {
-                if (robot->DoesAffect(joint_index, link_index)) {
-                    is_affected = true;
-                    break;
-                }
-            }
-
-            if (is_affected) {
-                // Synchronize the link itself.
-                if (link->IsEnabled()) {
-                    candidates.push_back(link);
-                }
-
-                // Get links for all bodies attached to this link.
-                for (KinBodyPtr const &grabbed_body
-                         : grabbed_map[link_index]) {
-                    GetCandidateLinks(grabbed_body, check_active, candidates, checked_bodies);
-                }
-            }
-        }
-    }
-    // Otherwise, synchronize all enabled links and attached bodies.
-    else {
-        for (LinkPtr const &link : pbody->GetLinks()) {
-            if (link->IsEnabled()) {
-                candidates.push_back(link);
-            }
-        }
-
-        std::set<KinBodyPtr> attached_bodies;
-        pbody->GetAttached(attached_bodies);
-        
-        for (KinBodyPtr const &attached_body : attached_bodies) {
-            if (attached_body.get() != pbody.get() && attached_body->IsEnabled()) {
-                GetCandidateLinks(attached_body, check_active, candidates, checked_bodies);
-            }
-        }
-    }
-
-    
-}
-
-}
+} // namespace or_fcl
