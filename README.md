@@ -83,6 +83,28 @@ instead of the default collision checker (typically ODE). See
 perform a collision check.
 
 
+## Benchmarks
+
+The collision checking benchmarks in the
+[or_benchmarks](https://github.com/personalrobotics/benchmarks/tree/master/or_benchmarks)
+package indicate that or_fcl is significantly (3-5 times) faster than
+OpenRAVE's included collision checkers for non-trivial queries:
+
+<img src="https://raw.githubusercontent.com/personalrobotics/benchmarks/master/or_benchmarks/results/self_collision.cps.png"
+     alt="self_collision_results" width="250"/>
+<img src="https://raw.githubusercontent.com/personalrobotics/benchmarks/master/or_benchmarks/results/empty_env_collision.cps.png"
+     alt="empty_env_collision_results" width="250"/>
+<img src="https://raw.githubusercontent.com/personalrobotics/benchmarks/master/or_benchmarks/results/prkitchen_collision.cps.png"
+     alt="prkitchen_env_results" width="250" />
+
+The performance of a collision checker strongly depends on characteristics of
+the environment (e.g. types of primitive geometry, convex vs. non-convex
+meshes, distance between geometries). As such, these benchmarks may not
+reflect the performance of or_fcl for your application. It is important that
+you benchmark collision detectors *on environments that are representative of
+your application* to make an informed decision.
+
+
 ## Troubleshooting
 
 You may get this warning when calling `RaveCreateCollisionChecker`:
