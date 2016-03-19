@@ -16,8 +16,10 @@ This package requires the following dependencies:
 - [Boost](http://www.boost.org/)
 - [FCL](https://github.com/flexible-collision-library/fcl) (tested with 0.3.2)
 - [OpenRAVE](http://www.openrave.org/) (tested with 0.9)
-- [openrave_catkin](https://github.com/personalrobotics/openrave_catkin) (only
-  if building inside a Catkin workspace)
+
+If you are building or_fcl in a Catkin workspace, you may optionally install
+the [openrave_catkin](https://github.com/personalrobotics/openrave_catkin)
+package to automatically manage your `OPENRAVE_PLUGINS` environment variable.
 
 
 ## Installation Instructions
@@ -43,10 +45,11 @@ $ catkin_make
 
 This will build the OpenRAVE plugins into the `share/openrave-0.9/plugins`
 directory in your `devel` space. If you run `catkin_make install` the plugin
-will be installed to the same directory in your `install` space. In both cases,
-the corresponding directory will be automatically added to your
-`OPENRAVE_PLUGINS` path using a Catkin environment hook. See the documentation
-for `openrave_catkin` for more information.
+will be installed to the same directory in your `install` space. In both
+cases, if you are using
+[openrave_catkin](https://github.com/personalrobotics/openrave_catkin), the
+corresponding directory will be automatically added to your `OPENRAVE_PLUGINS`
+path using a Catkin environment hook.
 
 
 ### Standalone Instructions

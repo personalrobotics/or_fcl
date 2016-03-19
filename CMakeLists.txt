@@ -67,13 +67,13 @@ if (${USE_CATKIN})
     catkin_add_nosetests(tests)
   endif()
 
-  set(OpenRAVE_DEVEL_DIR "${CATKIN_DEVEL_PREFIX}/${CATKIN_GLOBAL_SHARE_DESTINATION}/openrave-${OpenRAVE_LIBRARY_SUFFIX}")
-  set(OpenRAVE_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${CATKIN_GLOBAL_SHARE_DESTINATION}/openrave-${OpenRAVE_LIBRARY_SUFFIX}")
+  set(OpenRAVE_DEVEL_DIR "${CATKIN_DEVEL_PREFIX}/${CATKIN_GLOBAL_SHARE_DESTINATION}/openrave-${OpenRAVE_LIBRARY_SUFFIX}/plugins")
+  set(OpenRAVE_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${CATKIN_GLOBAL_SHARE_DESTINATION}/openrave-${OpenRAVE_LIBRARY_SUFFIX}/plugins")
 else ()
   message(STATUS "Building without Catkin.")
 
   set(OpenRAVE_DEVEL_DIR "")
-  set(OpenRAVE_INSTALL_DIR "share/openrave-${OpenRAVE_LIBRARY_SUFFIX}")
+  set(OpenRAVE_INSTALL_DIR "share/openrave-${OpenRAVE_LIBRARY_SUFFIX}/plugins")
 endif ()
 
 # Build the plugin.
