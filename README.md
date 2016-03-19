@@ -61,7 +61,7 @@ variable:
 $ git clone https://github.com/personalrobotics/or_fcl.git
 $ mkdir build
 $ cd build
-$ cmake -CMAKE_BUILD_TYPE=Release -DUSE_CATKIN:bool=0 ..
+$ cmake -DCMAKE_BUILD_TYPE=Release -DUSE_CATKIN:bool=0 ..
 $ make
 $ make install
 ```
