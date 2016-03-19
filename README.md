@@ -14,13 +14,10 @@ that uses FCL to perform collision checks.
 This package requires the following dependencies:
 
 - [Boost](http://www.boost.org/)
-- [FCL](https://github.com/flexible-collision-library/fcl) (tested with version 0.3.2)
-- [OpenRAVE](http://www.openrave.org/) (tested with version 0.9)
-
-If you are building `or_fcl` with Catkin support, then you also need to
-checkout the following package in your Catkin workspace:
-
-- [openrave_catkin](https://github.com/personalrobotics/openrave_catkin)
+- [FCL](https://github.com/flexible-collision-library/fcl) (tested with 0.3.2)
+- [OpenRAVE](http://www.openrave.org/) (tested with 0.9)
+- [openrave_catkin](https://github.com/personalrobotics/openrave_catkin) (only
+  if building inside a Catkin workspace)
 
 
 ## Installation Instructions
@@ -54,13 +51,14 @@ for `openrave_catkin` for more information.
 
 ### Standalone Instructions
 
-You can build or_fcl entirely ROS-agnostic by setting the `NO_ROS` variable:
+You can build or_fcl entirely ROS-agnostic by setting the `USE_CATKIN`
+variable:
 
 ```bash
 $ git clone https://github.com/personalrobotics/or_fcl.git
 $ mkdir build
 $ cd build
-$ cmake -DNO_ROS:bool=1 ..
+$ cmake -DUSE_CATKIN:bool=0 ..
 $ make
 ```
 This will build the plugin in the `lib/` directory.  You will need to add this
@@ -79,6 +77,19 @@ Any `CheckCollision` or `CheckSelfCollision` calls on `env` will now use FCL
 instead of the default collision checker (typically ODE). See
 [`scripts/text.py`](scripts/text.py) for a working example of using or_fcl to
 perform a collision check.
+
+
+## Troubleshooting
+
+You may get this warning when calling `RaveCreateCollisionChecker`:
+```
+[plugindatabase.h:577 Create] Failed to create name fcl, interface collisionchecker
+```
+This means that the or_fcl plugin is not in your `OPENRAVE_PLUGINS` path. If
+you are using `openrave_catkin`, try re-sourcing `setup.bash` in your Catkin
+workspace. If you are using a standalone build, try manually appending the
+`share/openrave-0.9/plugins` directory in your `CMAKE_INSTALL_PREFIX` to the
+`OPENRAVE_PLUGINS` environment variable.
 
 
 ## License
