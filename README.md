@@ -46,10 +46,11 @@ $ catkin_make
 This will build the OpenRAVE plugins into the `share/openrave-0.9/plugins`
 directory in your `devel` space. If you run `catkin_make install` the plugin
 will be installed to the same directory in your `install` space. In both
-cases, if you are using
-[openrave_catkin](https://github.com/personalrobotics/openrave_catkin), the
-corresponding directory will be automatically added to your `OPENRAVE_PLUGINS`
-path using a Catkin environment hook.
+cases, need to append the corresponding path to the `OPENRAVE_PLUGINS`
+environmental variable. This will be done automatically in your Catkin
+workspace's `setup.bash` file if you use the
+[openrave_catkin](https://github.com/personalrobotics/openrave_catkin) helper
+package.
 
 
 ### Standalone Instructions
@@ -64,8 +65,8 @@ $ cd build
 $ cmake -DUSE_CATKIN:bool=0 ..
 $ make
 ```
-This will build the plugin in the `lib/` directory.  You will need to add this
-directory to your `OPENRAVE_PLUGINS` path so that OpenRAVE can find it.
+This will build the plugin in the `lib/` directory.  You will need to append
+this directory to the `OPENRAVE_PLUGINS` environment variable.
 
 
 ## Usage
@@ -88,11 +89,12 @@ You may get this warning when calling `RaveCreateCollisionChecker`:
 ```
 [plugindatabase.h:577 Create] Failed to create name fcl, interface collisionchecker
 ```
-This means that the or_fcl plugin is not in your `OPENRAVE_PLUGINS` path. If
-you are using `openrave_catkin`, try re-sourcing `setup.bash` in your Catkin
-workspace. If you are using a standalone build, try manually appending the
-`share/openrave-0.9/plugins` directory in your `CMAKE_INSTALL_PREFIX` to the
-`OPENRAVE_PLUGINS` environment variable.
+This means that the or_fcl plugin is not in a directory listed in the
+`OPENRAVE_PLUGINS` environment variable. If you are using `openrave_catkin`,
+try re-sourcing `setup.bash` in your Catkin workspace. If you are using a
+standalone build, try manually appending the `share/openrave-0.9/plugins`
+directory in your `CMAKE_INSTALL_PREFIX` to the `OPENRAVE_PLUGINS` environment
+variable.
 
 
 ## License
