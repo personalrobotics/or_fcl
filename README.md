@@ -40,17 +40,16 @@ $ cd /my/workspace/src
 $ git clone https://github.com/personalrobotics/openrave_catkin.git
 $ git clone https://github.com/personalrobotics/or_fcl.git
 $ cd ..
-$ catkin_make
+$ catkin_make -DCMAKE_BUILD_TYPE=Release
 ```
 
 This will build the OpenRAVE plugins into the `share/openrave-0.9/plugins`
 directory in your `devel` space. If you run `catkin_make install` the plugin
-will be installed to the same directory in your `install` space. In both
-cases, need to append the corresponding path to the `OPENRAVE_PLUGINS`
-environmental variable. This will be done automatically in your Catkin
-workspace's `setup.bash` file if you use the
-[openrave_catkin](https://github.com/personalrobotics/openrave_catkin) helper
-package.
+will be installed to the same directory in your `install` space. In either
+case, you need to append the corresponding path to the `OPENRAVE_PLUGINS`
+environmental variable. The
+[openrave_catkin](https://github.com/personalrobotics/openrave_catkin) package
+does this automatically in your workspace's `setup.bash` file.
 
 
 ### Standalone Instructions
@@ -62,8 +61,9 @@ variable:
 $ git clone https://github.com/personalrobotics/or_fcl.git
 $ mkdir build
 $ cd build
-$ cmake -DUSE_CATKIN:bool=0 ..
+$ cmake -CMAKE_BUILD_TYPE=Release -DUSE_CATKIN:bool=0 ..
 $ make
+$ make install
 ```
 This will build the plugin in the `lib/` directory.  You will need to append
 this directory to the `OPENRAVE_PLUGINS` environment variable.
@@ -100,9 +100,7 @@ OpenRAVE's included collision checkers for non-trivial queries:
 The performance of a collision checker strongly depends on characteristics of
 the environment (e.g. types of primitive geometry, convex vs. non-convex
 meshes, distance between geometries). As such, these benchmarks may not
-reflect the performance of or_fcl for your application. It is important that
-you benchmark collision detectors *on environments that are representative of
-your application* to make an informed decision.
+reflect the performance of or_fcl for your application.
 
 
 ## Troubleshooting
