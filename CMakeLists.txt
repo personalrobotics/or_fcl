@@ -5,7 +5,7 @@ set(USE_CATKIN 1 CACHE BOOL "Build or_fcl as a Catkin package.")
 
 include(FindPkgConfig)
 include(CheckCXXSourceCompiles)
-include(cmake/CXX11.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CXX11.cmake")
 
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(OpenRAVE REQUIRED)
@@ -58,10 +58,14 @@ if (${USE_CATKIN})
   find_package(catkin)
   if (NOT "${catkin_FOUND}")
     message(FATAL_ERROR "Unable to find Catkin. Did you forget to pass"
-                        " -DUSE_CATKIN=0 to disable Catkin support.")
+                        " -DUSE_CATKIN=0 to disable Catkin support?")
   endif ()
 
   catkin_package()
+  catkin_add_env_hooks("20.${PROJECT_NAME}"
+    SHELLS sh
+    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/catkin-env-hooks"
+  )
 
   if (CATKIN_ENABLE_TESTING)
     catkin_add_nosetests(tests)

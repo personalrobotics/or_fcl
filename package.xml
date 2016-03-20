@@ -12,6 +12,5 @@
   <depend>boost</depend>
   <depend>fcl</depend>
   <depend>openrave</depend>
-  <depend>openrave_catkin</depend>
   <test_depend>python-nose</test_depend>
 </package>
