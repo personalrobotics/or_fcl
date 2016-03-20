@@ -72,7 +72,7 @@ env.SetCollisionChecker(collision_checker)
 ```
 Any `CheckCollision` or `CheckSelfCollision` calls on `env` will now use FCL
 instead of the default collision checker (typically ODE). See
-[`scripts/text.py`](scripts/text.py) for a working example of using or_fcl to
+[`scripts/test.py`](scripts/test.py) for a working example of using or_fcl to
 perform a collision check.
 
 
