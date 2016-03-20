@@ -3,8 +3,8 @@
 [![Build Status](https://travis-ci.com/personalrobotics/or_fcl.svg?token=37JV1kFUuyHcbn3JjJVG)](https://travis-ci.com/personalrobotics/or_fcl)
 
 [OpenRAVE](http://www.openrave.org/) bindings for the [Flexible Collision
-Checking Library](https://github.com/flexible-collision-library/fcl) (FCL).
-This package provides an OpenRAVE [collision checking
+Library](https://github.com/flexible-collision-library/fcl) (FCL).  This
+package provides an OpenRAVE [collision checking
 plugin](http://openrave.org/docs/latest_stable/coreapihtml/arch_collisionchecker.html)
 that uses FCL to perform collision checks.
 
@@ -59,13 +59,13 @@ variable:
 
 ```bash
 $ git clone https://github.com/personalrobotics/or_fcl.git
-$ mkdir build
-$ cd build
+$ mkdir -p or_fcl/build
+$ cd or_fcl/build
 $ cmake -DCMAKE_BUILD_TYPE=Release -DUSE_CATKIN:bool=0 ..
 $ make
 $ make install
 ```
-This will build the plugin in the `lib/` directory.  You will need to append
+This will build the plugin in the `build` directory.  You will need to append
 this directory to the `OPENRAVE_PLUGINS` environment variable.
 
 
