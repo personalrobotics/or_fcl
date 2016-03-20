@@ -1,6 +1,6 @@
 # or_fcl
 
-[![Build Status](https://travis-ci.com/personalrobotics/or_fcl.svg?token=37JV1kFUuyHcbn3JjJVG)](https://travis-ci.com/personalrobotics/or_fcl)
+[![Build Status](https://travis-ci.org/personalrobotics/or_fcl.svg?branch=master)](https://travis-ci.org/personalrobotics/or_fcl)
 
 [OpenRAVE](http://www.openrave.org/) bindings for the [Flexible Collision
 Library](https://github.com/flexible-collision-library/fcl) (FCL).  This
