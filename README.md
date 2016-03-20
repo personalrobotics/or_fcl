@@ -50,7 +50,7 @@ variable. You will need re-source `setup.sh` for this to take effect.
 You can build or_fcl entirely ROS-agnostic by setting the `USE_CATKIN`
 variable:
 
-```bash
+```console
 $ git clone https://github.com/personalrobotics/or_fcl.git
 $ mkdir -p or_fcl/build
 $ cd or_fcl/build
@@ -58,8 +58,12 @@ $ cmake -DCMAKE_BUILD_TYPE=Release -DUSE_CATKIN:bool=0 ..
 $ make
 $ make install
 ```
-This will build the plugin in the `build` directory.  You will need to append
-this directory to the `OPENRAVE_PLUGINS` environment variable.
+This will build the plugin in the `share/openrave-0.9/plugins` directory inside
+your `${CMAKE_INSTALL_PREFIX}`, which likely defaults to `/usr/local`. You will
+need to append this directory to your `OPENRAVE_PLUGINS` to use it, e.g.
+```console
+$ export OPENRAVE_PLUGINS="/usr/local/share/openrave-0.9/plugins:${OPENRAVE_PLUGINS}"
+```
 
 
 ## Usage
