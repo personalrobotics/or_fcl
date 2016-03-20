@@ -17,10 +17,6 @@ This package requires the following dependencies:
 - [FCL](https://github.com/flexible-collision-library/fcl) (tested with 0.3.2)
 - [OpenRAVE](http://www.openrave.org/) (tested with 0.9)
 
-If you are building or_fcl in a Catkin workspace, you may optionally install
-the [openrave_catkin](https://github.com/personalrobotics/openrave_catkin)
-package to automatically manage your `OPENRAVE_PLUGINS` environment variable.
-
 
 ## Installation Instructions
 
@@ -34,23 +30,20 @@ instructions specific to your environment.
 This preferred way of building or_fcl. In this case, you should already have
 OpenRAVE installed as a system dependency.
 
-```bash
-$ . /my/workspace/devel/setup.bash
-$ cd /my/workspace/src
-$ git clone https://github.com/personalrobotics/openrave_catkin.git
-$ git clone https://github.com/personalrobotics/or_fcl.git
-$ cd ..
+```console
+$ cd /my/workspace
+$ git clone https://github.com/personalrobotics/or_fcl.git src/or_fcl
+$ . devel/setup.sh
 $ catkin_make -DCMAKE_BUILD_TYPE=Release
 ```
 
 This will build the OpenRAVE plugins into the `share/openrave-0.9/plugins`
 directory in your `devel` space. If you run `catkin_make install` the plugin
 will be installed to the same directory in your `install` space. In either
-case, you need to append the corresponding path to the `OPENRAVE_PLUGINS`
-environmental variable. The
-[openrave_catkin](https://github.com/personalrobotics/openrave_catkin) package
-does this automatically in your workspace's `setup.bash` file.
-
+case, this package registers a [Catkin environment
+hook](http://docs.ros.org/fuerte/api/catkin/html/macros.html#catkin_add_env_hooks)
+that adds the installation directory to the `OPENRAVE_PLUGINS` environment
+variable. You will need re-source `setup.sh` for this to take effect.
 
 ### Standalone Instructions
 
@@ -110,11 +103,9 @@ You may get this warning when calling `RaveCreateCollisionChecker`:
 [plugindatabase.h:577 Create] Failed to create name fcl, interface collisionchecker
 ```
 This means that the or_fcl plugin is not in a directory listed in the
-`OPENRAVE_PLUGINS` environment variable. If you are using `openrave_catkin`,
-try re-sourcing `setup.bash` in your Catkin workspace. If you are using a
-standalone build, try manually appending the `share/openrave-0.9/plugins`
-directory in your `CMAKE_INSTALL_PREFIX` to the `OPENRAVE_PLUGINS` environment
-variable.
+`OPENRAVE_PLUGINS` environment variable. Try manually appending the
+`share/openrave-0.9/plugins` directory in your `CMAKE_INSTALL_PREFIX` to the
+`OPENRAVE_PLUGINS` environment variable.
 
 
 ## License
