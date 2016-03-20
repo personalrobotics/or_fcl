@@ -3,9 +3,9 @@
 # determine if we're in the devel or install space
 if [ "@DEVELSPACE@" = "True" -o "@DEVELSPACE@" = "true" ]
 then
-  PLUGINS=@CATKIN_DEVEL_PREFIX@/lib/openrave-@OpenRAVE_LIBRARY_SUFFIX@
+  PLUGINS=@CATKIN_DEVEL_PREFIX@/share/openrave-@OpenRAVE_LIBRARY_SUFFIX@/plugins
 else
-  PLUGINS=@CMAKE_INSTALL_PREFIX@/lib/openrave-@OpenRAVE_LIBRARY_SUFFIX@
+  PLUGINS=@CMAKE_INSTALL_PREFIX@/share/openrave-@OpenRAVE_LIBRARY_SUFFIX@/plugins
 fi 
 
 # append to paths (if not already there)
