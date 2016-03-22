@@ -310,6 +310,12 @@ bool FCLCollisionChecker::CheckCollision(
     if (!link1->IsEnabled() || !link2->IsEnabled())
         return false;
 
+    boost::unordered_set<LinkPair> disabled_pairs;
+    boost::unordered_set<LinkPair> self_enabled_pairs;
+    if (link1->GetParent() == link2->GetParent()) {
+        self_enabled_pairs.insert(MakeLinkPair(link1.get(), link2.get()));
+    }
+
     // Group 1: link1.
     manager1_->clear();
     SynchronizeLink(GetCollisionData(link1->GetParent()), link1.get(), &group1);
@@ -322,7 +328,7 @@ bool FCLCollisionChecker::CheckCollision(
     manager2_->registerObjects(group2);
     manager2_->setup();
 
-    return RunCheck(report);
+    return RunCheck(report, disabled_pairs, self_enabled_pairs);
 }
 
 /* checks collision of a link and a body.
