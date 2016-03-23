@@ -77,6 +77,7 @@ typedef OpenRAVE::KinBody::JointPtr JointPtr;
 typedef OpenRAVE::RobotBase::GrabbedInfoPtr GrabbedInfoPtr;
 typedef OpenRAVE::EnvironmentBase::CollisionCallbackFn CollisionCallbackFn;
 
+
 namespace {
 
 /*
