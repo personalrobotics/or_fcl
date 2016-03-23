@@ -208,6 +208,25 @@ class ORFCLTest(unittest.TestCase):
         self.assertTrue(self.penv.CheckCollision(cylinder, robot))
         self.assertFalse(self.penv.CheckCollision(robot))
         self.assertTrue(self.penv.CheckCollision(cylinder))
+
+    def test_collisionLinkLink(self):
+        robot = self.penv.ReadRobotXMLFile('robots/barrettwam.robot.xml')
+        self.penv.Add(robot)
+        arm = robot.GetManipulator('arm')
+        robot.SetActiveDOFs(robot.GetActiveManipulator().GetArmIndices())
+        
+        # this is a known colliding configuration between the base and hand
+        robot.SetActiveDOFValues([0., 1.8, 0., 2.8, 0., 0., 0.])
+        
+        # get links
+        link1 = robot.GetLink('wam0')
+        link2 = robot.GetLink('handbase')
+        self.assertTrue(link1 is not None)
+        self.assertTrue(link2 is not None)
+        
+        # validate result
+        self.assertTrue(self.penv.CheckCollision(link1, link2))
+        
     
 if __name__ == '__main__':
     unittest.main()
