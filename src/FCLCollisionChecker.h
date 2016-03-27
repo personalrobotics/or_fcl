@@ -142,6 +142,29 @@ public:
         LinkConstPtr plink,
         CollisionReportPtr report = CollisionReportPtr()
     ) OR_FCL_DUMMY_IMPLEMENTATION;
+    
+    /* Baked collision checks (experimental).
+     * When the same set of collision checks is expected to be performed
+     * many times, it is more efficient to "bake" the checks into
+     * an object (requiring some pre-computation), which can then be
+     * checked repeatedly.  This interface is intended mostly for
+     * motion planners.
+     */
+    boost::shared_ptr<void> CheckCollisionBaker(
+        const std::set< std::pair<LinkConstPtr,LinkConstPtr> > & pairs
+    );
+    
+    bool CheckCollisionBaked(
+        boost::shared_ptr<void> baked_check,
+        CollisionReportPtr report = CollisionReportPtr()
+    );
+    
+    /* Access to the baker functions without introducing a dependency
+     * on a base class.
+     */
+    boost::function< boost::shared_ptr<void> (const std::set< std::pair<LinkConstPtr,LinkConstPtr> > &)> baker_;
+    boost::function< bool (boost::shared_ptr<void>, CollisionReportPtr)> baked_;
+    virtual bool CmdGetBakerFunctions(std::ostream & soutput, std::istream & sinput);
 
 private:
     typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
