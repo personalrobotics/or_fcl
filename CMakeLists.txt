@@ -10,7 +10,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CXX11.cmake")
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(OpenRAVE REQUIRED)
 
-find_package(fcl)
+find_package(fcl QUIET)
 if (NOT fcl_FOUND)
   pkg_check_modules(fcl fcl)
 endif()
