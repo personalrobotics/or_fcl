@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************/
 #include <boost/make_shared.hpp>
 #include <openrave/plugin.h>
+#include "MarkPairsCollisionChecker.h"
 #include "FCLCollisionChecker.h"
 
 using OpenRAVE::EnvironmentBasePtr;
@@ -46,14 +47,17 @@ InterfaceBasePtr CreateInterfaceValidated(
 {
     if (type == PT_CollisionChecker && interface_name == "fcl") {
         return boost::make_shared<FCLCollisionChecker>(env);
-    } else {
-        return InterfaceBasePtr();
     }
+    if (type == PT_CollisionChecker && interface_name == "fcl_mark_pairs") {
+        return boost::make_shared<or_fcl::MarkPairsCollisionChecker>(env);
+    }
+    return InterfaceBasePtr();
 }
 
 void GetPluginAttributesValidated(PLUGININFO &info)
 {
     info.interfacenames[PT_CollisionChecker].push_back("fcl");
+    info.interfacenames[PT_CollisionChecker].push_back("fcl_mark_pairs");
 }
 
 RAVE_PLUGIN_API void DestroyPlugin()
