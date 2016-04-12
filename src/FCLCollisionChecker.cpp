@@ -547,7 +547,7 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
         KinBodyConstPtr pbody, CollisionReportPtr report)
 {
     if (baking_checker_)
-        return baking_checker_->CheckCollision(pbody,report);
+        return baking_checker_->CheckStandaloneSelfCollision(pbody,report);
     if (boost::dynamic_pointer_cast<BakedKinBody const>(pbody))
         return CheckBakedCollision(pbody);
     
@@ -611,6 +611,7 @@ void FCLCollisionChecker::BakeBegin()
         delete baking_checker_;
     }
     baking_checker_ = new or_fcl::MarkPairsCollisionChecker(GetEnv());
+    baking_checker_->SetCollisionOptions(options_);
 }
 
 OpenRAVE::KinBodyPtr FCLCollisionChecker::BakeEnd()

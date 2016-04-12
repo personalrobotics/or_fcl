@@ -41,6 +41,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 or_fcl::MarkPairsCollisionChecker::MarkPairsCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
     : OpenRAVE::CollisionCheckerBase(env)
+    , _collision_options(0)
 {
 }
 
