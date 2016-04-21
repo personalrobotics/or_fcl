@@ -30,8 +30,8 @@ link_directories(
 )
 
 # Check for OpenRAVE features.
-set(CMAKE_REQUIRED_INCLUDES ${OpenRAVE_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${OpenRAVE_LIBRARIES})
+set(CMAKE_REQUIRED_INCLUDES ${Boost_INCLUDE_DIRS} ${OpenRAVE_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${Boost_LIBRARIES} ${OpenRAVE_LIBRARIES})
 check_cxx_source_compiles("
   #include <openrave/openrave.h>
   int main() {
