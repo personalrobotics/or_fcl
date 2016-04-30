@@ -149,24 +149,16 @@ public:
      * an object (requiring some pre-computation), which can then be
      * checked repeatedly.  This interface is intended mostly for
      * motion planners.
-     *
-     * the created kinbody will not be added to the environment,
-     * and it will clean up after itself on destruction. */
-    void BakeBegin();
-    OpenRAVE::KinBodyPtr BakeEnd();
+     */
+    virtual bool CmdBakeGetType(std::ostream & soutput, std::istream & sinput);
+    virtual bool CmdBakeBegin(std::ostream & soutput, std::istream & sinput);
+    virtual OpenRAVE::KinBodyPtr BakeAttachKinBody();
+    virtual bool CmdBakeEnd(std::ostream & soutput, std::istream & sinput);
     
     virtual bool CheckBakedCollision(
         KinBodyConstPtr pbody,
         CollisionReportPtr report = CollisionReportPtr()
     );
-    
-    /* Access to the baker functions without introducing a dependency
-     * on a base class.
-     */
-    boost::function< void ()> fn_bake_begin_;
-    boost::function< OpenRAVE::KinBodyPtr ()> fn_bake_end_;
-    boost::function< bool (KinBodyConstPtr, CollisionReportPtr)> fn_check_baked_collision_;
-    virtual bool CmdGetBakingFunctions(std::ostream & soutput, std::istream & sinput);
 
 private:
     typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
@@ -185,8 +177,9 @@ private:
     MeshFactory mesh_factory_;
     BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
-    // when this is non-null, we're baking!
+    // when these are non-null, we're baking!
     or_fcl::MarkPairsCollisionChecker * baking_checker_;
+    OpenRAVE::KinBodyPtr baking_kinbody_;
     
     FCLUserDataPtr GetCollisionData(OpenRAVE::KinBodyConstPtr const &body) const;
 

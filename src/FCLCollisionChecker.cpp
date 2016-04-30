@@ -166,16 +166,19 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
     , user_data_(str(format("or_fcl[%p]") % this))
     , num_contacts_(100)
     , options_(0)
-    , fn_bake_begin_(boost::bind(&FCLCollisionChecker::BakeBegin,this))
-    , fn_bake_end_(boost::bind(&FCLCollisionChecker::BakeEnd,this))
-    , fn_check_baked_collision_(boost::bind(&FCLCollisionChecker::CheckBakedCollision,this,_1,_2))
     , baking_checker_(0)
 {
     SetBroadphaseAlgorithm("SSaP");
     SetBVHRepresentation("OBB");
-    RegisterCommand("GetBakingFunctions",
-        boost::bind(&FCLCollisionChecker::CmdGetBakingFunctions,this,_1,_2),
-        "GetBakingFunctions");
+    RegisterCommand("BakeGetType",
+        boost::bind(&FCLCollisionChecker::CmdBakeGetType,this,_1,_2),
+        "BakeGetType");
+    RegisterCommand("BakeBegin",
+        boost::bind(&FCLCollisionChecker::CmdBakeBegin,this,_1,_2),
+        "BakeBegin");
+    RegisterCommand("BakeEnd",
+        boost::bind(&FCLCollisionChecker::CmdBakeEnd,this,_1,_2),
+        "BakeEnd");
 }
 
 FCLCollisionChecker::~FCLCollisionChecker()
@@ -603,28 +606,62 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     return RunCheck(report, disabled_pairs, self_enabled_pairs);
 }
 
-void FCLCollisionChecker::BakeBegin()
+bool FCLCollisionChecker::CmdBakeGetType(std::ostream & soutput, std::istream & sinput)
+{
+    soutput << "fcl_baked";
+    return true;
+}
+
+bool FCLCollisionChecker::CmdBakeBegin(std::ostream & soutput, std::istream & sinput)
 {
     if (baking_checker_)
     {
         RAVELOG_WARN("Interrupted a previous bake!\n");
         delete baking_checker_;
+        baking_kinbody_.reset();
     }
     baking_checker_ = new or_fcl::MarkPairsCollisionChecker(GetEnv());
     baking_checker_->SetCollisionOptions(options_);
+    return true;
 }
 
-OpenRAVE::KinBodyPtr FCLCollisionChecker::BakeEnd()
+OpenRAVE::KinBodyPtr FCLCollisionChecker::BakeAttachKinBody()
 {
     if (!baking_checker_)
     {
         RAVELOG_ERROR("No bake currently in progress!\n");
         return OpenRAVE::KinBodyPtr();
     }
+    if (baking_kinbody_)
+    {
+        RAVELOG_WARN("Returning an already created kinbody for this bake!\n");
+    }
+    baking_kinbody_ = make_shared<BakedKinBody>(GetEnv());
+    return baking_kinbody_;
+}
+
+bool FCLCollisionChecker::CmdBakeEnd(std::ostream & soutput, std::istream & sinput)
+{
+    if (!baking_checker_)
+    {
+        RAVELOG_ERROR("No bake currently in progress!\n");
+        baking_kinbody_.reset();
+        return false;
+    }
+    if (!baking_kinbody_)
+    {
+        RAVELOG_ERROR("No destination baked kinbody created!\n");
+        delete baking_checker_;
+        return false;
+    }
+    
     const std::set<or_fcl::MarkPairsCollisionChecker::LinkPair> & pairs
         = baking_checker_->GetMarkedPairs();
     
-    boost::shared_ptr<BakedKinBody> baked_kinbody = make_shared<BakedKinBody>(GetEnv());
+    // retreive created baked kinbody
+    boost::shared_ptr<BakedKinBody> baked_kinbody
+        = boost::static_pointer_cast<BakedKinBody>(baking_kinbody_);
+    baking_kinbody_.reset();
     
     // collect all links used in this baked check
     std::set<LinkConstPtr> links;
@@ -758,10 +795,12 @@ OpenRAVE::KinBodyPtr FCLCollisionChecker::BakeEnd()
         fcl::BroadPhaseCollisionManager * man2 = baked_kinbody->managers[edge->second].get();
         baked_kinbody->manager_checks.push_back(std::make_pair(man1,man2));
     }
-    
+
+    // finish bake
     delete baking_checker_;
     baking_checker_ = 0;
-    return baked_kinbody;
+    
+    return true;
 }
 
 bool FCLCollisionChecker::CheckBakedCollision(KinBodyConstPtr pbody, CollisionReportPtr report)
@@ -837,12 +876,6 @@ bool FCLCollisionChecker::CheckBakedCollision(KinBodyConstPtr pbody, CollisionRe
     }
     
     return false;
-}
-
-bool FCLCollisionChecker::CmdGetBakingFunctions(std::ostream & soutput, std::istream & sinput)
-{
-    soutput << (void *)&fn_bake_begin_ << " " << (void *)&fn_bake_end_ << " " << (void *)&fn_check_baked_collision_;
-    return true;
 }
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
