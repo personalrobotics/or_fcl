@@ -29,9 +29,23 @@ link_directories(
   ${OpenRAVE_LIBRARY_DIRS}
 )
 
+# Enable C++11.
+check_for_cxx11_compiler(CXX11_SUPPORTED)
+if(CXX11_SUPPORTED)
+  enable_cxx11()
+else()
+  message(FATAL_ERROR "Compiler does not support C++0x or C++11.")
+endif()
+
 # Check for OpenRAVE features.
 set(CMAKE_REQUIRED_INCLUDES ${Boost_INCLUDE_DIRS} ${OpenRAVE_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${Boost_LIBRARIES} ${OpenRAVE_LIBRARIES})
+set(CMAKE_REQUIRED_DEFINITIONS ${OpenRAVE_CXX_FLAGS} ${OpenRAVE_LINK_FLAGS})
+set(CMAKE_REQUIRED_FLAGS)
+foreach(dir ${OpenRAVE_LIBRARY_DIRS})
+  list(APPEND CMAKE_REQUIRED_FLAGS "-L${dir}")
+endforeach()
+
 check_cxx_source_compiles("
   #include <openrave/openrave.h>
   int main() {
@@ -39,17 +53,9 @@ check_cxx_source_compiles("
   r.vLinkColliding.push_back(std::make_pair(OpenRAVE::KinBody::LinkConstPtr(),OpenRAVE::KinBody::LinkConstPtr()));
   }" HAVE_REPORT_VLINKCOLLIDING_PAIR
 )
-if (HAVE_REPORT_VLINKCOLLIDING_PAIR)
+if(HAVE_REPORT_VLINKCOLLIDING_PAIR)
   add_definitions(-DHAVE_REPORT_VLINKCOLLIDING_PAIR)
 endif ()
-
-# Enable C++11.
-check_for_cxx11_compiler(CXX11_SUPPORTED)
-if (NOT "${CXX11_SUPPORTED}")
-  message(FATAL_ERROR "Compiler does not support C++0x or C++11.")
-endif ()
-
-enable_cxx11()
 
 # Setup Catkin.
 if (${USE_CATKIN})
