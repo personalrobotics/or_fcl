@@ -31,11 +31,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************/
 #include <boost/make_shared.hpp>
 #include <openrave/plugin.h>
+#include "MarkPairsCollisionChecker.h"
 #include "FCLCollisionChecker.h"
 
 using OpenRAVE::EnvironmentBasePtr;
 using OpenRAVE::InterfaceBasePtr;
 using OpenRAVE::InterfaceType;
+using OpenRAVE::PT_KinBody;
 using OpenRAVE::PT_CollisionChecker;
 using OpenRAVE::PLUGININFO;
 using or_fcl::FCLCollisionChecker;
@@ -46,14 +48,26 @@ InterfaceBasePtr CreateInterfaceValidated(
 {
     if (type == PT_CollisionChecker && interface_name == "fcl") {
         return boost::make_shared<FCLCollisionChecker>(env);
-    } else {
-        return InterfaceBasePtr();
     }
+    if (type == PT_CollisionChecker && interface_name == "fcl_mark_pairs") {
+        return boost::make_shared<or_fcl::MarkPairsCollisionChecker>(env);
+    }
+    if (type == PT_KinBody && interface_name == "fcl_baked") {
+        boost::shared_ptr<FCLCollisionChecker> cc
+            = boost::dynamic_pointer_cast<FCLCollisionChecker>(
+                env->GetCollisionChecker());
+        if (!cc)
+            return InterfaceBasePtr();
+        return cc->BakeAttachKinBody();
+    }
+    return InterfaceBasePtr();
 }
 
 void GetPluginAttributesValidated(PLUGININFO &info)
 {
     info.interfacenames[PT_CollisionChecker].push_back("fcl");
+    info.interfacenames[PT_CollisionChecker].push_back("fcl_mark_pairs");
+    info.interfacenames[PT_KinBody].push_back("fcl_baked");
 }
 
 RAVE_PLUGIN_API void DestroyPlugin()

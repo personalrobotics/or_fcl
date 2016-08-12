@@ -36,6 +36,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <boost/unordered_set.hpp>
 #include <fcl/collision.h>
 #include <fcl/shape/geometric_shapes.h>
+#include "MarkPairsCollisionChecker.h"
 #include "FCLCollisionChecker.h"
 
 // Broad-phase collision checkers.
@@ -71,11 +72,15 @@ using OpenRAVE::Vector;
 typedef boost::shared_ptr<fcl::CollisionObject> CollisionObjectPtr;
 typedef OpenRAVE::KinBody::Link Link;
 typedef OpenRAVE::KinBody::LinkPtr LinkPtr;
+typedef OpenRAVE::KinBody::LinkConstPtr LinkConstPtr;
 typedef OpenRAVE::KinBody::Link::Geometry Geometry;
 typedef OpenRAVE::KinBody::Link::GeometryPtr GeometryPtr;
+typedef OpenRAVE::KinBody::Link::GeometryConstPtr GeometryConstPtr;
 typedef OpenRAVE::KinBody::JointPtr JointPtr;
 typedef OpenRAVE::RobotBase::GrabbedInfoPtr GrabbedInfoPtr;
 typedef OpenRAVE::EnvironmentBase::CollisionCallbackFn CollisionCallbackFn;
+typedef boost::shared_ptr<fcl::CollisionObject> CollisionObjectPtr;
+typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
 
 
 namespace {
@@ -85,7 +90,8 @@ namespace {
  */
 struct CollisionQuery {
     CollisionQuery()
-        : is_collision(false)
+        : do_link_ignores(true)
+        , is_collision(false)
         , num_narrow(0)
     {
     }
@@ -95,12 +101,48 @@ struct CollisionQuery {
     fcl::CollisionResult result;
     CollisionReportPtr report;
     std::list<CollisionCallbackFn> callbacks;
+    bool do_link_ignores;
     unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
     unordered_set<std::pair<Link const *, Link const *> > self_enabled_pairs;
 
     bool is_collision;
     int num_narrow;
 
+};
+
+class BakedKinBody: public OpenRAVE::KinBody
+{
+public:
+    BakedKinBody(OpenRAVE::EnvironmentBasePtr penv):
+       OpenRAVE::KinBody(OpenRAVE::PT_KinBody, penv)
+    {
+    }
+    virtual ~BakedKinBody()
+    {
+    }
+   
+    /* these are pointers to all fcl objects that are involved
+     * in this baked checker
+     * one per link
+     * the purpose of this is to make it fast to pose the fcl objects
+     * correctly on each baked check call
+     * all CollisionObjectPtrs are non-null
+     * this owns copies of all CollisionObjects for the lifetime of the baked check
+     */
+    struct BakedLink
+    {
+        LinkConstPtr link;
+        std::vector< std::pair<GeometryConstPtr, CollisionObjectPtr> > fcl_objects;
+    };
+    std::vector<BakedLink> links;
+
+    /* these are the managers used in the checks
+     * (one per computed link group)
+     */
+    std::vector<BroadPhaseCollisionManagerPtr> managers;
+    
+    /* these are the manager pairs that are to be checked */
+    std::vector< std::pair<fcl::BroadPhaseCollisionManager *,fcl::BroadPhaseCollisionManager *> > manager_checks;
 };
 
 }
@@ -124,9 +166,19 @@ FCLCollisionChecker::FCLCollisionChecker(OpenRAVE::EnvironmentBasePtr env)
     , user_data_(str(format("or_fcl[%p]") % this))
     , num_contacts_(100)
     , options_(0)
+    , baking_checker_(0)
 {
     SetBroadphaseAlgorithm("SSaP");
     SetBVHRepresentation("OBB");
+    RegisterCommand("BakeGetType",
+        boost::bind(&FCLCollisionChecker::CmdBakeGetType,this,_1,_2),
+        "BakeGetType");
+    RegisterCommand("BakeBegin",
+        boost::bind(&FCLCollisionChecker::CmdBakeBegin,this,_1,_2),
+        "BakeBegin");
+    RegisterCommand("BakeEnd",
+        boost::bind(&FCLCollisionChecker::CmdBakeEnd,this,_1,_2),
+        "BakeEnd");
 }
 
 FCLCollisionChecker::~FCLCollisionChecker()
@@ -235,6 +287,9 @@ void FCLCollisionChecker::DestroyEnvironment()
 bool FCLCollisionChecker::CheckCollision(
         KinBodyConstPtr body, CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckCollision(body,report);
+    
     static std::vector<KinBodyConstPtr> const vbodyexcluded_empty;
     static std::vector<LinkConstPtr> const vlinkexcluded_empty;
 
@@ -249,9 +304,13 @@ bool FCLCollisionChecker::CheckCollision(
         KinBodyConstPtr pbody1, KinBodyConstPtr pbody2,
         CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckCollision(pbody1,pbody2,report);
+    
     CollisionGroup group1, group2;
 
     // Check to see if either of the bodies is grabbing the other
+    // If so, this would be a self collision.
     if( pbody1->IsAttached(pbody2) ){
         return false;
     }
@@ -293,6 +352,9 @@ bool FCLCollisionChecker::CheckCollision(
 bool FCLCollisionChecker::CheckCollision(
         LinkConstPtr plink, CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckCollision(plink,report);
+    
     static std::vector<KinBodyConstPtr> const vbodyexcluded_empty;
     static std::vector<LinkConstPtr> const vlinkexcluded_empty;
 
@@ -306,6 +368,9 @@ bool FCLCollisionChecker::CheckCollision(
 bool FCLCollisionChecker::CheckCollision(
         LinkConstPtr link1, LinkConstPtr link2, CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckCollision(link1,link2,report);
+    
     CollisionGroup group1, group2;
 
     if (!link1->IsEnabled() || !link2->IsEnabled())
@@ -339,6 +404,9 @@ bool FCLCollisionChecker::CheckCollision(
 bool FCLCollisionChecker::CheckCollision(
     LinkConstPtr plink, KinBodyConstPtr pbody, CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckCollision(plink,pbody,report);
+    
     CollisionGroup group1, group2;
     
     // Check to see if either of the bodies is grabbing the other
@@ -377,6 +445,9 @@ bool FCLCollisionChecker::CheckCollision(
     std::vector<LinkConstPtr> const &vlinkexcluded,
     CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckCollision(plink,vbodyexcluded,vlinkexcluded,report);
+    
     CollisionGroup group1, group2;
 
     unordered_set<KinBodyConstPtr> excluded_body_set(
@@ -427,6 +498,8 @@ bool FCLCollisionChecker::CheckCollision(
     std::vector<LinkConstPtr> const &vlinkexcluded,
     CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckCollision(pbody,vbodyexcluded,vlinkexcluded,report);
 
     CollisionGroup group1, group2;
 
@@ -476,6 +549,11 @@ bool FCLCollisionChecker::CheckCollision(
 bool FCLCollisionChecker::CheckStandaloneSelfCollision(
         KinBodyConstPtr pbody, CollisionReportPtr report)
 {
+    if (baking_checker_)
+        return baking_checker_->CheckStandaloneSelfCollision(pbody,report);
+    if (boost::dynamic_pointer_cast<BakedKinBody const>(pbody))
+        return CheckBakedCollision(pbody);
+    
     unordered_set<std::pair<Link const *, Link const *> > disabled_pairs;
     unordered_set<std::pair<Link const *, Link const *> > self_enabled_pairs;
     CollisionGroup group1, group2;
@@ -526,6 +604,278 @@ bool FCLCollisionChecker::CheckStandaloneSelfCollision(
     manager2_->setup();
 
     return RunCheck(report, disabled_pairs, self_enabled_pairs);
+}
+
+bool FCLCollisionChecker::CmdBakeGetType(std::ostream & soutput, std::istream & sinput)
+{
+    soutput << "fcl_baked";
+    return true;
+}
+
+bool FCLCollisionChecker::CmdBakeBegin(std::ostream & soutput, std::istream & sinput)
+{
+    if (baking_checker_)
+    {
+        RAVELOG_WARN("Interrupted a previous bake!\n");
+        delete baking_checker_;
+        baking_kinbody_.reset();
+    }
+    baking_checker_ = new or_fcl::MarkPairsCollisionChecker(GetEnv());
+    baking_checker_->SetCollisionOptions(options_);
+    return true;
+}
+
+OpenRAVE::KinBodyPtr FCLCollisionChecker::BakeAttachKinBody()
+{
+    if (!baking_checker_)
+    {
+        RAVELOG_ERROR("No bake currently in progress!\n");
+        return OpenRAVE::KinBodyPtr();
+    }
+    if (baking_kinbody_)
+    {
+        RAVELOG_WARN("Returning an already created kinbody for this bake!\n");
+    }
+    baking_kinbody_ = make_shared<BakedKinBody>(GetEnv());
+    return baking_kinbody_;
+}
+
+bool FCLCollisionChecker::CmdBakeEnd(std::ostream & soutput, std::istream & sinput)
+{
+    if (!baking_checker_)
+    {
+        RAVELOG_ERROR("No bake currently in progress!\n");
+        baking_kinbody_.reset();
+        return false;
+    }
+    if (!baking_kinbody_)
+    {
+        RAVELOG_ERROR("No destination baked kinbody created!\n");
+        delete baking_checker_;
+        return false;
+    }
+    
+    const std::set<or_fcl::MarkPairsCollisionChecker::LinkPair> & pairs
+        = baking_checker_->GetMarkedPairs();
+    
+    // retreive created baked kinbody
+    boost::shared_ptr<BakedKinBody> baked_kinbody
+        = boost::static_pointer_cast<BakedKinBody>(baking_kinbody_);
+    baking_kinbody_.reset();
+    
+    // collect all links used in this baked check
+    std::set<LinkConstPtr> links;
+    for (std::set< std::pair<LinkConstPtr, LinkConstPtr> >::iterator
+     link_pair=pairs.begin(); link_pair!=pairs.end(); link_pair++)
+    {
+        links.insert(link_pair->first);
+        links.insert(link_pair->second);
+    }
+    
+    // construct one BakedLinkObject object per link
+    // also make a link-indexed map for fast lookup later in the baker
+    std::map<const Link *, size_t> link_indices;
+    for (std::set<LinkConstPtr>::iterator
+        link=links.begin(); link!=links.end(); link++)
+    {
+        BakedKinBody::BakedLink baked_link;
+        baked_link.link = *link;
+        
+        FCLUserDataPtr const &collision_data = GetCollisionData((*link)->GetParent());
+        
+        // populate _fcl_objects with all objects (with non-NULL geometry)
+        for (GeometryPtr const &geom : (*link)->GetGeometries()) {
+            auto const result = collision_data->geometries.insert(
+                make_pair(geom.get(), CollisionObjectPtr())
+            );
+            CollisionObjectPtr &fcl_object = result.first->second;
+
+            // Convert the OpenRAVE geometry into FCL geometry. This is
+            // necessary if: (1) there is no existing FCL geometry for this
+            // shape or (2) the geometric is dynamic and could be modified at
+            // any time.
+            if (result.second) { // || geom->IsModifiable()) {
+                CollisionGeometryPtr const fcl_geom = ConvertGeometryToFCL(
+                    mesh_factory_, geom
+                );
+                if (fcl_geom) {
+                    fcl_object = make_shared<fcl::CollisionObject>(fcl_geom);
+                    fcl_object->setUserData(const_cast<Link *>((*link).get()));
+                }
+            }
+            
+            if (!fcl_object)
+                continue;
+            
+            // this is an object that we'll need to pose every time we do a check!
+            baked_link.fcl_objects.push_back(std::make_pair(geom,fcl_object));
+        }
+        
+        link_indices.insert(std::make_pair((*link).get(), baked_kinbody->links.size()));
+        baked_kinbody->links.push_back(baked_link);
+    }
+    
+    // map from neighbor set to matching vertices
+    // there will be one map entry for each link group
+    std::map< std::set<LinkConstPtr>, std::set<LinkConstPtr> > neighbor_index;
+    for (std::set<LinkConstPtr>::iterator
+        link=links.begin(); link!=links.end(); link++)
+    {
+        std::set<LinkConstPtr> neighbors;
+        for (std::set< std::pair<LinkConstPtr, LinkConstPtr> >::iterator
+            link_pair=pairs.begin(); link_pair!=pairs.end(); link_pair++)
+        {
+            if (*link == link_pair->first)
+               neighbors.insert(link_pair->second);
+            if (*link == link_pair->second)
+               neighbors.insert(link_pair->first);
+        }
+        if (neighbor_index.find(neighbors) == neighbor_index.end())
+            neighbor_index.insert(std::make_pair(neighbors, std::set<LinkConstPtr>()));
+        neighbor_index[neighbors].insert(*link);
+    }
+
+    // get linkgroup indices
+    std::vector< std::set<LinkConstPtr> > linkgroups;
+    for (std::map< std::set<LinkConstPtr>, std::set<LinkConstPtr> >::iterator
+        it=neighbor_index.begin(); it!=neighbor_index.end(); it++)
+    {
+        linkgroups.push_back(it->second);
+    }
+
+    // get edges by index
+    std::set< std::pair<size_t,size_t> > edges;
+    for (unsigned int ui1=0; ui1<linkgroups.size(); ui1++)
+    {
+        for (unsigned int ui2=ui1+1; ui2<linkgroups.size(); ui2++)
+        {
+            std::set< std::pair<LinkConstPtr, LinkConstPtr> >::iterator link_pair;
+            for (link_pair=pairs.begin(); link_pair!=pairs.end(); link_pair++)
+            {
+                if (link_pair->first == *linkgroups[ui1].begin() && link_pair->second == *linkgroups[ui2].begin())
+                    break;
+                if (link_pair->second == *linkgroups[ui1].begin() && link_pair->first == *linkgroups[ui2].begin())
+                    break;
+            }
+            if (link_pair!=pairs.end())
+                edges.insert(std::make_pair(ui1,ui2));
+        }
+    }
+
+    // for each linkgroup, make a manager
+    for (unsigned int ui=0; ui<linkgroups.size(); ui++)
+    {
+        // collect all fcl objects in this link group
+        std::vector<fcl::CollisionObject *> objects;
+        for (std::set<LinkConstPtr>::iterator
+            linkgroup=linkgroups[ui].begin(); linkgroup!=linkgroups[ui].end(); linkgroup++)
+        {
+            size_t idx = link_indices[(*linkgroup).get()];
+            // add all objects to the group
+            for (std::vector< std::pair<GeometryConstPtr, CollisionObjectPtr> >::iterator
+                fcl_object=baked_kinbody->links[idx].fcl_objects.begin();
+                fcl_object!=baked_kinbody->links[idx].fcl_objects.end();
+                fcl_object++)
+            {
+                objects.push_back(fcl_object->second.get());
+            }
+        }
+        // construct a manager
+        BroadPhaseCollisionManagerPtr manager = make_shared<fcl::SSaPCollisionManager>();
+        manager->registerObjects(objects);
+        baked_kinbody->managers.push_back(manager);
+    }
+
+    // convert each edge (between link groups)
+    // into a manager check
+    for (std::set< std::pair<size_t,size_t> >::iterator
+        edge=edges.begin(); edge!=edges.end(); edge++)
+    {
+        fcl::BroadPhaseCollisionManager * man1 = baked_kinbody->managers[edge->first].get();
+        fcl::BroadPhaseCollisionManager * man2 = baked_kinbody->managers[edge->second].get();
+        baked_kinbody->manager_checks.push_back(std::make_pair(man1,man2));
+    }
+
+    // finish bake
+    delete baking_checker_;
+    baking_checker_ = 0;
+    
+    return true;
+}
+
+bool FCLCollisionChecker::CheckBakedCollision(KinBodyConstPtr pbody, CollisionReportPtr report)
+{
+    boost::shared_ptr<BakedKinBody const> baked_kinbody = boost::static_pointer_cast<BakedKinBody const>(pbody);
+    
+    // step one: update poses of all fcl objects
+    for (std::vector<BakedKinBody::BakedLink>::const_iterator
+        baked_link=baked_kinbody->links.begin(); baked_link!=baked_kinbody->links.end(); baked_link++)
+    {
+        OpenRAVE::Transform const link_pose = baked_link->link->GetTransform();
+        
+        // TODO: some links are known fixed!
+        for (std::vector< std::pair<GeometryConstPtr, CollisionObjectPtr> >::const_iterator
+            fcl_object=baked_link->fcl_objects.begin(); fcl_object!=baked_link->fcl_objects.end(); fcl_object++)
+        {
+            OpenRAVE::Transform const &pose = link_pose * fcl_object->first->GetTransform();
+            fcl::Vec3f const new_position = ConvertVectorToFCL(pose.trans);
+            fcl::Quaternion3f const new_orientation = ConvertQuaternionToFCL(pose.rot);
+            fcl_object->second->setTranslation(new_position);
+            fcl_object->second->setQuatRotation(new_orientation);
+            fcl_object->second->computeAABB();
+        }
+    }
+    
+    // step two: update all managers, since poses have changed!
+    // update() calls setup() under the hood!
+    for (std::vector<BroadPhaseCollisionManagerPtr>::const_iterator
+        manager=baked_kinbody->managers.begin(); manager!=baked_kinbody->managers.end(); manager++)
+    {
+        (*manager)->update();
+    }
+    
+    // step three: perform all checks!
+    for (std::vector< std::pair<fcl::BroadPhaseCollisionManager *,fcl::BroadPhaseCollisionManager *> >::const_iterator
+        manager_check=baked_kinbody->manager_checks.begin(); manager_check!=baked_kinbody->manager_checks.end(); manager_check++)
+    {
+        CollisionQuery query;
+        query.env = GetEnv();
+        query.report = report;
+        query.env->GetRegisteredCollisionCallbacks(query.callbacks);
+
+        // We must have a CollisionReport if callbacks are registered, since they
+        // get passed the CollisionReport as an argument.
+        if (!query.callbacks.empty() && !query.report) {
+            query.report = make_shared<CollisionReport>();
+        }
+
+        query.do_link_ignores = false;
+
+        if (options_ & OpenRAVE::CO_Distance) {
+            throw OpenRAVE::openrave_exception(
+                "or_fcl does not currently support CO_Distance.",
+                OpenRAVE::ORE_NotImplemented
+            );
+        }
+
+        if (options_ & OpenRAVE::CO_Contacts) {
+            query.request.enable_contact = true;
+            query.request.num_max_contacts = num_contacts_;
+        }
+
+        // Initialize the report.
+        if (report)
+            report->Reset(options_);
+
+        fcl::BroadPhaseCollisionManager * man1 = manager_check->first;
+        fcl::BroadPhaseCollisionManager * man2 = manager_check->second;
+        man1->collide(man2, &query, &FCLCollisionChecker::NarrowPhaseCheckCollision);
+        
+        if (query.result.isCollision())
+            return true;
+    }
+    
+    return false;
 }
 
 bool FCLCollisionChecker::InitKinBody(KinBodyPtr body)
@@ -810,25 +1160,28 @@ bool FCLCollisionChecker::NarrowPhaseCheckCollision(
 {
 
     auto const query = static_cast<CollisionQuery *>(data);
-    LinkConstPtr const plink1 = GetCollisionLink(*o1);
-    LinkConstPtr const plink2 = GetCollisionLink(*o2);
-    auto const link_pair = MakeLinkPair(plink1.get(), plink2.get());
+    
+    if (query->do_link_ignores) {
+        LinkConstPtr const plink1 = GetCollisionLink(*o1);
+        LinkConstPtr const plink2 = GetCollisionLink(*o2);
+        auto const link_pair = MakeLinkPair(plink1.get(), plink2.get());
 
-    // Ignore collision checks with the same object. This might happen if we
-    // call a CheckCollision with two parameters that overlap.
-    if (plink1 == plink2) {
-        return false; // Keep going.
-    }
-    // Ignore disabled pairs of links. MakeLinkPair enforces the invariant that
-    // plink1 <= plink2, so we don't need to check (plink2, plink1).
-    else if (query->disabled_pairs.count(link_pair)) {
-        return false; // Keep going.
-    }
-    // Only check for self collision if links are non-adjacent. Due to a bug
-    // in OpenRAVE, links may be neither adjacent nor non-adjacent.
-    else if (plink1->GetParent() == plink2->GetParent() 
-             && !query->self_enabled_pairs.count(link_pair)) {
-        return false; // Keep going.
+        // Ignore collision checks with the same object. This might happen if we
+        // call a CheckCollision with two parameters that overlap.
+        if (plink1 == plink2) {
+            return false; // Keep going.
+        }
+        // Ignore disabled pairs of links. MakeLinkPair enforces the invariant that
+        // plink1 <= plink2, so we don't need to check (plink2, plink1).
+        else if (query->disabled_pairs.count(link_pair)) {
+            return false; // Keep going.
+        }
+        // Only check for self collision if links are non-adjacent. Due to a bug
+        // in OpenRAVE, links may be neither adjacent nor non-adjacent.
+        else if (plink1->GetParent() == plink2->GetParent() 
+                 && !query->self_enabled_pairs.count(link_pair)) {
+            return false; // Keep going.
+        }
     }
 
     size_t const num_contacts = fcl::collide(o1, o2, query->request,

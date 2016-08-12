@@ -142,6 +142,23 @@ public:
         LinkConstPtr plink,
         CollisionReportPtr report = CollisionReportPtr()
     ) OR_FCL_DUMMY_IMPLEMENTATION;
+    
+    /* Baked collision checks (experimental).
+     * When the same set of collision checks is expected to be performed
+     * many times, it is more efficient to "bake" the checks into
+     * an object (requiring some pre-computation), which can then be
+     * checked repeatedly.  This interface is intended mostly for
+     * motion planners.
+     */
+    virtual bool CmdBakeGetType(std::ostream & soutput, std::istream & sinput);
+    virtual bool CmdBakeBegin(std::ostream & soutput, std::istream & sinput);
+    virtual OpenRAVE::KinBodyPtr BakeAttachKinBody();
+    virtual bool CmdBakeEnd(std::ostream & soutput, std::istream & sinput);
+    
+    virtual bool CheckBakedCollision(
+        KinBodyConstPtr pbody,
+        CollisionReportPtr report = CollisionReportPtr()
+    );
 
 private:
     typedef boost::shared_ptr<fcl::BroadPhaseCollisionManager> BroadPhaseCollisionManagerPtr;
@@ -160,6 +177,10 @@ private:
     MeshFactory mesh_factory_;
     BroadPhaseCollisionManagerPtr manager1_, manager2_;
 
+    // when these are non-null, we're baking!
+    or_fcl::MarkPairsCollisionChecker * baking_checker_;
+    OpenRAVE::KinBodyPtr baking_kinbody_;
+    
     FCLUserDataPtr GetCollisionData(OpenRAVE::KinBodyConstPtr const &body) const;
 
     bool RunCheck(

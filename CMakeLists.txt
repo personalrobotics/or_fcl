@@ -90,6 +90,7 @@ endif ()
 add_library("${PROJECT_NAME}_plugin" SHARED
   src/or_fcl_plugin.cpp
   src/FCLCollisionChecker.cpp
+  src/MarkPairsCollisionChecker.cpp
 )
 target_link_libraries("${PROJECT_NAME}_plugin"
   ${Boost_LIBRARIES}
